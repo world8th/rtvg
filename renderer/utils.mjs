@@ -1,35 +1,42 @@
 import fs from "fs";
-import nvk from "nvk";
-import { GLSL } from "nvk-essentials";
-import { performance } from "perf_hooks";
-import glm from "gl-matrix";
+import "nvk";
+import "gl-matrix";
+import {GLSL} from "nvk-essentials";
+import {performance} from "perf_hooks";
 
-(()=>{
-    Object.assign(this, nvk);
-    Object.assign(this, glm);
-    this.win = new VulkanWindow({ width: 1920, height: 1080, title: "RTX Vector Graphics" });
-    this.result = null;
-    this.device = new VkDevice();
-    this.instance = new VkInstance();
-    this.surface = new VkSurfaceKHR();
-    this.swapchain = null;
-    this.pipelineLayout = new VkPipelineLayout();
-    this.renderPass = new VkRenderPass();
-    this.pipeline = new VkPipeline();
-    this.cmdPool = new VkCommandPool();
-    this.queue = new VkQueue();
-    this.vertShaderModule = null;
-    this.fragShaderModule = null;
-    this.semaphoreImageAvailable = new VkSemaphore();
-    this.semaphoreRenderingDone = new VkSemaphore();
+let exports = global.exports || {};
 
-    
+//(async ()=>{
+//(()=>{
+    //let fs = await import("fs");
+    //let nvk = await import("vk");
+    //let { GLSL } = await import("vk-essentials");
+    //let { performance } = await import("perf_hooks");
+    //let { glm } = await import("gl-matrix");
+    //Object.assign(Object.assign(this, glm), vk);
 
-    this.readBinaryFile = (path) => {
+    let win = new VulkanWindow({ width: 1920, height: 1080, title: "RTX Vector Graphics" });
+    let result = null;
+    let device = new VkDevice();
+    let instance = new VkInstance();
+    let surface = new VkSurfaceKHR();
+    let swapchain = null;
+    let pipelineLayout = new VkPipelineLayout();
+    let renderPass = new VkRenderPass();
+    let pipeline = new VkPipeline();
+    let cmdPool = new VkCommandPool();
+    let queue = new VkQueue();
+    let vertShaderModule = null;
+    let fragShaderModule = null;
+    let semaphoreImageAvailable = new VkSemaphore();
+    let semaphoreRenderingDone = new VkSemaphore();
+
+
+    let readBinaryFile = (path) => {
         return new Uint8Array(fs.readFileSync(path, null));
     };
 
-    this.createShaderModule = (shaderSrc, shaderModule) => {
+    let createShaderModule = (shaderSrc, shaderModule) => {
         let shaderModuleInfo = new VkShaderModuleCreateInfo();
         shaderModuleInfo.pCode = shaderSrc;
         shaderModuleInfo.codeSize = shaderSrc.byteLength;
@@ -38,15 +45,14 @@ import glm from "gl-matrix";
         return shaderModule;
     };
 
-
-    this.createInstance = () => {
+    let createInstance = () => {
         // app info
         let appInfo = new VkApplicationInfo();
         appInfo.pApplicationName = "Hello!";
-        appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.applicationVersion = VK_MAKE_VERSION(1, 1, 0);
         appInfo.pEngineName = "No Engine";
-        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 1, 0);
+        appInfo.apiVersion = VK_API_VERSION_1_1;
     
         // create info
         let createInfo = new VkInstanceCreateInfo();
@@ -64,14 +70,22 @@ import glm from "gl-matrix";
     
         result = vkCreateInstance(createInfo, null, instance);
         ASSERT_VK_RESULT(result);
+        return instance;
     };
     
-    this.createWindowSurface = () => {
+    let createWindowSurface = () => {
         result = win.createSurface(instance, null, surface);
         ASSERT_VK_RESULT(result);
+        return surface;
     };
     
-    this.createPhysicalDevice = () => {
+    let createSurfaceCapabilities = () => {
+        let surfaceCapabilities = new VkSurfaceCapabilitiesKHR();
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, surfaceCapabilities);
+        return surfaceCapabilities;
+    };
+
+    let createPhysicalDevice = () => {
         let deviceCount = { $:0 };
         vkEnumeratePhysicalDevices(instance, deviceCount, null);
         if (deviceCount.$ <= 0) console.error("Error: No render devices available!");
@@ -81,7 +95,7 @@ import glm from "gl-matrix";
         ASSERT_VK_RESULT(result);
     
         // auto pick first found device
-        this.physicalDevice = devices[0];
+        physicalDevice = devices[0];
     
         let deviceFeatures = new VkPhysicalDeviceFeatures();
         vkGetPhysicalDeviceFeatures(physicalDevice, deviceFeatures);
@@ -115,17 +129,17 @@ import glm from "gl-matrix";
         let surfaceSupport = { $: false };
         vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, 0, surface, surfaceSupport);
         if (!surfaceSupport) console.error(`No surface creation support!`);
+
+        return physicalDevice;
     };
     
-    this.createLogicalDevice = () => {
+    let createLogicalDevice = () => {
         let deviceQueueInfo = new VkDeviceQueueCreateInfo();
         deviceQueueInfo.queueFamilyIndex = 0;
         deviceQueueInfo.queueCount = 1;
         deviceQueueInfo.pQueuePriorities = new Float32Array([1.0, 1.0, 1.0, 1.0]);
     
-        let deviceExtensions = [
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        ];
+        let deviceExtensions = [VK_KHR_SWAPCHAIN_EXTENSION_NAME];
     
         let usedFeatures = new VkPhysicalDeviceFeatures();
         usedFeatures.samplerAnisotropy = true;
@@ -139,13 +153,15 @@ import glm from "gl-matrix";
     
         result = vkCreateDevice(physicalDevice, deviceInfo, null, device);
         ASSERT_VK_RESULT(result);
+
+        return device;
     };
     
-    this.createQueue = () => {
-        vkGetDeviceQueue(device, 0, 0, queue);
+    let createQueue = () => {
+        vkGetDeviceQueue(device, 0, 0, queue); return queue;
     };
     
-    this.createSwapchain = () => {
+    let createSwapchain = () => {
         let imageExtent = new VkExtent2D();
         imageExtent.width = win.width;
         imageExtent.height = win.height;
@@ -169,9 +185,11 @@ import glm from "gl-matrix";
         swapchain = new VkSwapchainKHR();
         result = vkCreateSwapchainKHR(device, swapchainInfo, null, swapchain);
         ASSERT_VK_RESULT(result);
+
+        return swapchain;
     };
     
-    this.createSwapchainImageViews = () => {
+    let createSwapchainImageViews = () => {
         let amountOfImagesInSwapchain = { $: 0 };
         vkGetSwapchainImagesKHR(device, swapchain, amountOfImagesInSwapchain, null);
         let swapchainImages = [...Array(amountOfImagesInSwapchain.$)].map(() => new VkImage());
@@ -181,31 +199,33 @@ import glm from "gl-matrix";
     
         let imageViews = [...Array(amountOfImagesInSwapchain.$)].map(() => new VkImageView());
         for (let ii = 0; ii < amountOfImagesInSwapchain.$; ++ii) {
-        let components = new VkComponentMapping();
-        components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        let subresourceRange = new VkImageSubresourceRange();
-        subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        subresourceRange.baseMipLevel = 0;
-        subresourceRange.levelCount = 1;
-        subresourceRange.baseArrayLayer = 0;
-        subresourceRange.layerCount = 1;
-        let imageViewInfo = new VkImageViewCreateInfo();
-        imageViewInfo.image = swapchainImages[ii];
-        imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imageViewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
-        imageViewInfo.components = components;
-        imageViewInfo.subresourceRange = subresourceRange;
-        result = vkCreateImageView(device, imageViewInfo, null, imageViews[ii])
-        ASSERT_VK_RESULT(result);
-        };
+            let components = new VkComponentMapping();
+            components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+            components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+            components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+            components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+            let subresourceRange = new VkImageSubresourceRange();
+            subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            subresourceRange.baseMipLevel = 0;
+            subresourceRange.levelCount = 1;
+            subresourceRange.baseArrayLayer = 0;
+            subresourceRange.layerCount = 1;
+            let imageViewInfo = new VkImageViewCreateInfo();
+            imageViewInfo.image = swapchainImages[ii];
+            imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            imageViewInfo.format = VK_FORMAT_B8G8R8A8_UNORM;
+            imageViewInfo.components = components;
+            imageViewInfo.subresourceRange = subresourceRange;
+            result = vkCreateImageView(device, imageViewInfo, null, imageViews[ii]);
+            ASSERT_VK_RESULT(result);
+        }
         swapchainImageViews = imageViews;
         swapchainImageCount = amountOfImagesInSwapchain.$;
+
+        return swapchainImageViews;
     };
     
-    this.createRenderPass = () => {
+    let createRenderPass = () => {
         let attachmentDescription = new VkAttachmentDescription();
         attachmentDescription.flags = 0;
         attachmentDescription.format = VK_FORMAT_B8G8R8A8_UNORM;
@@ -251,9 +271,10 @@ import glm from "gl-matrix";
     
         result = vkCreateRenderPass(device, renderPassInfo, null, renderPass);
         ASSERT_VK_RESULT(result);
+        return renderPass;
     };
 
-    this.createFramebuffers = () => {
+    let createFramebuffers = () => {
         framebuffers = [...Array(swapchainImageCount)].map(() => new VkFramebuffer());
         for (let ii = 0; ii < swapchainImageCount; ++ii) {
             let framebufferInfo = new VkFramebufferCreateInfo();
@@ -265,19 +286,21 @@ import glm from "gl-matrix";
             framebufferInfo.layers = 1;
             result = vkCreateFramebuffer(device, framebufferInfo, null, framebuffers[ii]);
             ASSERT_VK_RESULT(result);
-        };
+        }
+        return framebuffers;
     };
 
-    this.createCommandPool = () => {
+    let createCommandPool = () => {
         let cmdPoolInfo = new VkCommandPoolCreateInfo();
         cmdPoolInfo.flags = 0;
         cmdPoolInfo.queueFamilyIndex = 0;
         
         result = vkCreateCommandPool(device, cmdPoolInfo, null, cmdPool);
         ASSERT_VK_RESULT(result);
+        return cmdPool;
     };
 
-    this.createCommandBuffers = () => {
+    let createCommandBuffers = () => {
         let cmdBufferAllocInfo = new VkCommandBufferAllocateInfo();
         cmdBufferAllocInfo.commandPool = cmdPool;
         cmdBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -286,9 +309,10 @@ import glm from "gl-matrix";
         
         result = vkAllocateCommandBuffers(device, cmdBufferAllocInfo, cmdBuffers);
         ASSERT_VK_RESULT(result);
+        return cmdBuffers;
     };
 
-    this.createDescriptorPool = () => {
+    let createDescriptorPool = () => {
         let descriptorPoolSize = new VkDescriptorPoolSize();
         descriptorPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorPoolSize.descriptorCount = 1;
@@ -301,9 +325,13 @@ import glm from "gl-matrix";
         descriptorPoolInfo.maxSets = 1;
         descriptorPoolInfo.poolSizeCount = 2;
         descriptorPoolInfo.pPoolSizes = [descriptorPoolSize, samplerDescriptorPoolSize];
+        
         result = vkCreateDescriptorPool(device, descriptorPoolInfo, null, descriptorPool);
         ASSERT_VK_RESULT(result);
+        return descriptorPool;
     };
-      
 
-})();
+
+    export {readBinaryFile, createShaderModule, createCommandBuffers, createInstance, createWindowSurface, createSurfaceCapabilities, createPhysicalDevice, createLogicalDevice, createQueue, createSwapchain, createSwapchainImageViews, createRenderPass, createFramebuffers, createDescriptorPool, createCommandPool};
+
+//}).call(exports);
