@@ -679,3 +679,4 @@ impl Drop for ExampleBase {
         }
     }
 }
+
