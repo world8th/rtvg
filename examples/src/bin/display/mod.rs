@@ -1,7 +1,8 @@
-extern crate ash;
-extern crate examples;
+//extern crate ash;
+//extern crate examples;
 
 //pub mod display;
+extern crate ash;
 
 use ash::util::*;
 use ash::vk;
@@ -57,7 +58,7 @@ impl Renderer {
             },
         ];
         
-        let color_attachment_refs = [vk::AttachmentReference { attachment: 0,  layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, }];
+        let color_attachment_refs = [vk::AttachmentReference { attachment: 0, layout: vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, }];
         let depth_attachment_ref = vk::AttachmentReference { attachment: 1, layout: vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL, };
         let dependencies = [vk::SubpassDependency {
             src_subpass: vk::SUBPASS_EXTERNAL,
@@ -121,7 +122,8 @@ impl Renderer {
             .usage(vk::BufferUsageFlags::INDEX_BUFFER)
             .sharing_mode(vk::SharingMode::EXCLUSIVE), None).unwrap();
         let index_buffer_memory_req = base.device.get_buffer_memory_requirements(index_buffer);
-        let index_buffer_memory_index = find_memorytype_index( &index_buffer_memory_req, &base.device_memory_properties, vk::MemoryPropertyFlags::HOST_VISIBLE,).expect("Unable to find suitable memorytype for the index buffer.");
+        let index_buffer_memory_index = find_memorytype_index( &index_buffer_memory_req, &base.device_memory_properties, vk::MemoryPropertyFlags::HOST_VISIBLE,)
+            .expect("Unable to find suitable memorytype for the index buffer.");
 
         let index_allocate_info = vk::MemoryAllocateInfo {
             allocation_size: index_buffer_memory_req.size,
@@ -227,7 +229,7 @@ impl Renderer {
             ..Default::default()
         };
         let vertex_input_assembly_state_info = vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_STRIP,
+            topology: vk::PrimitiveTopology::TRIANGLE_FAN,
             ..Default::default()
         };
         let viewports = [vk::Viewport {
@@ -312,11 +314,8 @@ impl Renderer {
     // Render Loop itself
 
         base.render_loop(|| {
-            let (present_index, _) = base
-                .swapchain_loader
-                .acquire_next_image(base.swapchain, std::u64::MAX, base.present_complete_semaphore, vk::Fence::null(),)
-                .unwrap();
-                
+            let (present_index, _) = base.swapchain_loader.acquire_next_image(base.swapchain, std::u64::MAX, base.present_complete_semaphore, vk::Fence::null(),).unwrap();
+
             let clear_values = [
                 vk::ClearValue { color: vk::ClearColorValue { float32: [0.0, 0.0, 0.0, 0.0], }, },
                 vk::ClearValue { depth_stencil: vk::ClearDepthStencilValue { depth: 1.0, stencil: 0, }, },
@@ -345,7 +344,7 @@ impl Renderer {
                     device.cmd_set_scissor(draw_command_buffer, 0, &scissors);
                     device.cmd_bind_vertex_buffers(draw_command_buffer, 0, &[vertex_input_buffer], &[0],);
                     device.cmd_bind_index_buffer(draw_command_buffer, index_buffer, 0, vk::IndexType::UINT32,);
-                    device.cmd_draw_indexed(draw_command_buffer, index_buffer_data.len() as u32, 1, 0, 0, 1,);
+                    device.cmd_draw_indexed(draw_command_buffer, index_buffer_data.len() as u32, 1, 0, 0, 0,);
                     // Or draw without the index buffer
                     // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
                     device.cmd_end_render_pass(draw_command_buffer);
