@@ -1,7 +1,4 @@
-//extern crate ash;
-//extern crate examples;
-
-//pub mod display;
+//#[macro_use]
 extern crate ash;
 
 use ash::util::*;
