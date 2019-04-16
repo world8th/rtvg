@@ -5,7 +5,7 @@ authors = ["elv.h <elviras9t@gmail.com>"]
 edition = "2018"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3.4", features = ["windef", "winuser"] }
+winapi = { version = "0.3.7", features = ["windef", "winuser"] }
 
 [dependencies]
 ferris-says = "0.1"
