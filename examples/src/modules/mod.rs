@@ -2,8 +2,7 @@
 
 #[macro_use]
 pub mod base;
-pub mod display;
-
 pub use base::*;
-pub use display::*;
 
+pub mod display;
+pub use display::*;
