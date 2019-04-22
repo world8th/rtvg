@@ -1,15 +1,16 @@
-//#[macro_use]
-extern crate ash;
+//extern crate examples;
+//use examples::*;
+use super::base::*;
 
 use ash::util::*;
 use ash::vk;
-use examples::*;
 use std::default::Default;
 use std::ffi::CString;
 use std::fs::File;
 use std::mem;
 use std::mem::align_of;
 use std::path::Path;
+//use examples::*;
 
 #[derive(Clone, Debug, Copy)]
 struct Vertex {

@@ -1,10 +1,11 @@
-//extern crate ash;
-//extern crate examples;
+//#[macro_use]
+extern crate ash;
 
-pub mod display;
-use display::*;
+//#[macro_use]
+extern crate examples;
+use examples::*;
 
 fn main(){
     let renderer: Renderer = Renderer::new();
-    renderer.render_loop(&1920u32,&1080u32);
+    renderer.render_loop(&960u32,&540u32);
 }
