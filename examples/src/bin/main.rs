@@ -6,6 +6,10 @@ extern crate examples;
 use examples::*;
 
 fn main(){
-    let renderer: Renderer = Renderer::new();
-    renderer.render_loop(&960u32,&540u32);
+    let renderer: Renderer = Renderer::new(&960u32,&540u32);
+
+
+
+    
+    renderer.render_loop();
 }

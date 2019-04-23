@@ -376,6 +376,7 @@ impl ExampleBase {
                 .image(image);
             device.create_image_view(&create_view_info, None).unwrap()
         }).collect();
+        
         let device_memory_properties = instance.get_physical_device_memory_properties(pdevice);
         let depth_image_create_info = vk::ImageCreateInfo::builder()
             .image_type(vk::ImageType::TYPE_2D)
