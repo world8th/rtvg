@@ -9,6 +9,7 @@ Possible solutions...
 Possible solutions... 
 
 For C++ way
+- https://github.com/delfrrr/delaunator-cpp
 - https://github.com/I3ck/lib_2d 
 - https://github.com/mapbox/earcut.hpp
 - https://github.com/KhronosGroup/Vulkan-Hpp
