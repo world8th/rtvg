@@ -110,3 +110,7 @@ ipch/*
 ipch/
 */ipch/
 
+build/
+build/*
+*/build/
+*/build/*
