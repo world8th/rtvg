@@ -62,15 +62,15 @@ namespace rnd {
     inline auto getShaderDir(const uint32_t vendorID) {
         std::string shaderDir = "./universal/";
         switch (vendorID) {
-            case 4318:
-                shaderDir = "./nvidia/";
-                break;
-            case 4098:
-                shaderDir = "./amd/";
-                break;
-            case 8086: // x86 ID, WHAT?
-                shaderDir = "./intel/";
-                break;
+        case 4318:
+            shaderDir = "./nvidia/";
+            break;
+        case 4098:
+            shaderDir = "./amd/";
+            break;
+        case 8086: // x86 ID, WHAT?
+            shaderDir = "./intel/";
+            break;
         }
         return shaderDir;
     };
@@ -82,16 +82,16 @@ namespace rnd {
         double mX = 1e-5, mY = 1e-5, dX = 0.0, dY = 0.0;
         double tDiff = 0.0, tCurrent = 1e-5;
     };
-    
+
     class Renderer;
 
 
     class Shared : public std::enable_shared_from_this<Shared> {
-        public: 
-        static Active active ; // shared properties
-        static GLFWwindow* window ; // in-bound GLFW window
+    public:
+        static Active active; // shared properties
+        static GLFWwindow* window; // in-bound GLFW window
         friend Renderer;
-        
+
         static void TimeCallback(double milliseconds = 1e-5) {
             Shared::active.tDiff = milliseconds - Shared::active.tCurrent, Shared::active.tCurrent = milliseconds;
         };
@@ -107,7 +107,7 @@ namespace rnd {
             if (action == GLFW_RELEASE) Shared::active.mouse[button] = uint8_t(0u);
         };
 
-        static void MouseMoveCallback(GLFWwindow* window, double xpos = 1e-5, double ypos = 1e-5) {
+        static void MouseMoveCallback(GLFWwindow * window, double xpos = 1e-5, double ypos = 1e-5) {
             Shared::active.dX = xpos - Shared::active.mX, Shared::active.dY = ypos - Shared::active.mY; // get diff with previous position
             Shared::active.mX = xpos, Shared::active.mY = ypos; // set current mouse position
         };
@@ -179,24 +179,24 @@ namespace rnd {
 
 
         // sub-contollers
-        void leftRight(glm::vec3 &ca, const float &diff) {
+        void leftRight(glm::vec3 & ca, const float& diff) {
             ca.x += diff / 100.0f;
         }
-        
-        void topBottom(glm::vec3 &ca, const float &diff) {
+
+        void topBottom(glm::vec3 & ca, const float& diff) {
             ca.y += diff / 100.0f;
         }
 
-        void forwardBackward(glm::vec3 &ca, const float &diff) {
+        void forwardBackward(glm::vec3 & ca, const float& diff) {
             ca.z += diff / 100.0f;
         }
 
-        void rotateY(glm::vec3 &vi, const float &diff) {
+        void rotateY(glm::vec3 & vi, const float& diff) {
             glm::mat4 rot = glm::rotate(diff / float(canvasSize->y) * 2.f, glm::vec3(-1.0f, 0.0f, 0.0f));
             vi = (rot * glm::vec4(vi, 1.0f)).xyz();
         }
 
-        void rotateX(glm::vec3 &vi, const float &diff) {
+        void rotateX(glm::vec3 & vi, const float& diff) {
             glm::mat4 rot = glm::rotate(diff / float(canvasSize->x) * 2.f, glm::vec3(0.0f, -1.0f, 0.0f));
             vi = (rot * glm::vec4(vi, 1.0f)).xyz();
         }
@@ -211,33 +211,33 @@ namespace rnd {
 
     // renderer biggest class 
     class Renderer : public std::enable_shared_from_this<Renderer> {
-    public: 
+    public:
         GLFWwindow* window = nullptr; // bound GLFW window
 
-		operator vk::Instance& () { return appBase->instance; }
-		operator const vk::Instance&() const { return appBase->instance; }
-		operator vk::Queue& () { return appBase->queue; }
-		operator const vk::Queue& () const { return appBase->queue; }
-		operator vk::RenderPass& () { return appBase->renderpass; }
-		operator const vk::RenderPass& () const { return appBase->renderpass; }
+        operator vk::Instance& () { return appBase->instance; }
+        operator const vk::Instance& () const { return appBase->instance; }
+        operator vk::Queue& () { return appBase->queue; }
+        operator const vk::Queue& () const { return appBase->queue; }
+        operator vk::RenderPass& () { return appBase->renderpass; }
+        operator const vk::RenderPass& () const { return appBase->renderpass; }
 
-		// vRt-based (legacy) rendering model
-		std::shared_ptr<vte::ComputeFramework> appBase = nullptr;
-		std::shared_ptr<vte::GraphicsContext> currentContext = nullptr;
-		std::shared_ptr<CameraController> cameraController = nullptr;
+        // vRt-based (legacy) rendering model
+        std::shared_ptr<vte::ComputeFramework> appBase = nullptr;
+        std::shared_ptr<vte::GraphicsContext> currentContext = nullptr;
+        std::shared_ptr<CameraController> cameraController = nullptr;
 
-		// RadX-based object system
-		std::shared_ptr<radx::Device> device;
+        // RadX-based object system
+        std::shared_ptr<radx::Device> device;
 
-		// just helpers 
-		std::shared_ptr<radx::PhysicalDeviceHelper> physicalHelper;
-		std::shared_ptr<radx::VmaAllocatedBuffer> vmaDeviceBuffer, vmaToHostBuffer, vmaHostBuffer;//, vmaToDeviceBuffer;
+        // just helpers 
+        std::shared_ptr<radx::PhysicalDeviceHelper> physicalHelper;
+        std::shared_ptr<radx::VmaAllocatedBuffer> vmaDeviceBuffer, vmaToHostBuffer, vmaHostBuffer;//, vmaToDeviceBuffer;
 
-		// output image allocation
-		std::shared_ptr<radx::VmaAllocatedImage> outputImage;
+        // output image allocation
+        std::shared_ptr<radx::VmaAllocatedImage> outputImage;
 
 
-		std::vector<vk::DescriptorSet> drawDescriptorSets = {};
+        std::vector<vk::DescriptorSet> drawDescriptorSets = {};
 
         bool enableAdvancedAcceleration = true;
         float guiScale = 1.0f;
@@ -255,7 +255,7 @@ namespace rnd {
         std::string bgTexName = "";
         std::string modelInput = "";
         std::string directory = "./";
-        
+
         // timings
         double modelScale = 1.0, tPastFramerateStreamF = 60.0, tPast = 1e-5; int32_t reflectionLevel = 0, transparencyLevel = 0;
         std::chrono::high_resolution_clock::time_point tStart = {}; // starting time

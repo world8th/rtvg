@@ -13,7 +13,7 @@ namespace rnd {
 
     const uint32_t blockWidth = 8, blockheight = 8;
 
-     void Renderer::Arguments(int argc, char** argv) {
+    void Renderer::Arguments(int argc, char** argv) {
         args::ArgumentParser parser("This is a test rendering program.", "");
         args::HelpFlag help(parser, "help", "Available flags", { 'h', "help" });
         args::ValueFlag<int32_t> computeflag(parser, "compute-device-id", "Vulkan compute device (UNDER CONSIDERATION)", { 'c' });
@@ -25,9 +25,9 @@ namespace rnd {
         args::ValueFlag<std::string> modelflag(parser, "model", "Model to view (planned multiple models support)", { 'm' });
         args::Flag forceCompute(parser, "force-compute", "Force enable compute shader backend", { 'F' });
 
-        args::ValueFlag<int32_t> reflLV(parser, "reflection-level", "Level of reflections", {'R'});
-        args::ValueFlag<int32_t> trnsLV(parser, "transparency-level", "Level of transparency", {'T'});
-        
+        args::ValueFlag<int32_t> reflLV(parser, "reflection-level", "Level of reflections", { 'R' });
+        args::ValueFlag<int32_t> trnsLV(parser, "transparency-level", "Level of transparency", { 'T' });
+
         try { parser.ParseCLI(argc, argv); }
         catch (args::Help) { std::cout << parser; glfwTerminate(); exit(1); };
 
@@ -46,7 +46,7 @@ namespace rnd {
         //if (forceCompute) enableAdvancedAcceleration = !args::get(forceCompute);
     };
 
-     void Renderer::Init(uint32_t windowWidth, uint32_t windowHeight, bool enableSuperSampling) {
+    void Renderer::Init(uint32_t windowWidth, uint32_t windowHeight, bool enableSuperSampling) {
         // create GLFW window
         this->windowWidth = windowWidth, this->windowHeight = windowHeight;
         this->window = glfwCreateWindow(windowWidth, windowHeight, "vRt early test", NULL, NULL);
@@ -59,12 +59,12 @@ namespace rnd {
         // create vulkan and ray tracing instance
         appBase = std::make_shared<vte::ComputeFramework>();
         cameraController = std::make_shared<CameraController>();
-        cameraController->canvasSize = (glm::uvec2*)&this->windowWidth;
+        cameraController->canvasSize = (glm::uvec2*) & this->windowWidth;
         cameraController->eyePos = &this->eyePos;
         cameraController->upVector = &this->upVector;
         cameraController->viewVector = &this->viewVector;
 
-		// create VK instance
+        // create VK instance
         auto instance = appBase->createInstance();
         if (!instance) { glfwTerminate(); exit(EXIT_FAILURE); }
 
@@ -77,7 +77,7 @@ namespace rnd {
         //if (gpuID < 0 || gpuID == -1) gpuID = 0;
 
         // create surface and get format by physical device
-		auto gpu = appBase->getPhysicalDevice(gpuID);
+        auto gpu = appBase->getPhysicalDevice(gpuID);
         appBase->createWindowSurface(this->window, this->realWidth, this->realHeight, title);
         appBase->format(appBase->getSurfaceFormat(gpu));
 
@@ -95,30 +95,30 @@ namespace rnd {
         // create combined device object
         shaderPack = shaderPrefix + "shaders/" + getShaderDir(devProperties.vendorID);
 
-		// create radix sort application (RadX C++)
-		physicalHelper = std::make_shared<radx::PhysicalDeviceHelper>(appBase->getPhysicalDevice(0));
-		device = std::make_shared<radx::Device>()->initialize(appBase->createDevice(false, shaderPack, true), physicalHelper);
-		appBase->createRenderpass(device);
+        // create radix sort application (RadX C++)
+        physicalHelper = std::make_shared<radx::PhysicalDeviceHelper>(appBase->getPhysicalDevice(0));
+        device = std::make_shared<radx::Device>()->initialize(appBase->createDevice(false, shaderPack, true), physicalHelper);
+        appBase->createRenderpass(device);
 
 
         // create image output
         const auto SuperSampling = enableSuperSampling ? 2.0 : 1.0; // super sampling image
-        this->canvasWidth  = this->windowWidth  * SuperSampling;
+        this->canvasWidth = this->windowWidth * SuperSampling;
         this->canvasHeight = this->windowHeight * SuperSampling;
 
     };
 
-     void Renderer::InitCommands() {
+    void Renderer::InitCommands() {
 
     };
 
 
-     void Renderer::InitRayTracing() {
+    void Renderer::InitRayTracing() {
 
     };
 
 
-     void Renderer::InitPipeline() {
+    void Renderer::InitPipeline() {
         // descriptor set bindings
         std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings = { vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, nullptr) };
         std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { vk::Device(*device).createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setPBindings(descriptorSetLayoutBindings.data()).setBindingCount(1)) };
@@ -126,7 +126,7 @@ namespace rnd {
         // pipeline layout and cache
         auto pipelineLayout = vk::Device(*device).createPipelineLayout(vk::PipelineLayoutCreateInfo().setPSetLayouts(descriptorSetLayouts.data()).setSetLayoutCount(descriptorSetLayouts.size()));
         auto descriptorSets = vk::Device(*device).allocateDescriptorSets(vk::DescriptorSetAllocateInfo().setDescriptorPool(*device).setDescriptorSetCount(descriptorSetLayouts.size()).setPSetLayouts(descriptorSetLayouts.data()));
-        drawDescriptorSets = {descriptorSets[0]};
+        drawDescriptorSets = { descriptorSets[0] };
 
         // create pipeline
         vk::Pipeline trianglePipeline = {};
@@ -191,7 +191,7 @@ namespace rnd {
         };
 
         { // write descriptors for showing texture
-			outputImage = std::make_shared<radx::VmaAllocatedImage>(device, vk::ImageViewType::e2D, vk::Format::eR32G32B32A32Sfloat, appBase->applicationWindow.surfaceSize, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage);
+            outputImage = std::make_shared<radx::VmaAllocatedImage>(device, vk::ImageViewType::e2D, vk::Format::eR32G32B32A32Sfloat, appBase->applicationWindow.surfaceSize, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage);
 
             vk::SamplerCreateInfo samplerInfo = {};
             samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
@@ -208,7 +208,7 @@ namespace rnd {
             imageDesc.sampler = sampler;
 
             // update descriptors
-			vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
+            vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
                 vk::WriteDescriptorSet().setDstSet(descriptorSets[0]).setDstBinding(0).setDstArrayElement(0).setDescriptorCount(1).setDescriptorType(vk::DescriptorType::eCombinedImageSampler).setPImageInfo(&imageDesc),
             }, nullptr);
         };
@@ -218,12 +218,12 @@ namespace rnd {
             auto context = currentContext;
 
             // create graphics context
-			context->queueFamilyIndex = appBase->queueFamilyIndex;
-			context->queue = appBase->queue;
-			context->commandPool = appBase->commandPool;
+            context->queueFamilyIndex = appBase->queueFamilyIndex;
+            context->queue = appBase->queue;
+            context->commandPool = appBase->commandPool;
             context->device = device;
             context->pipeline = trianglePipeline;
-			context->descriptorPool = *device;
+            context->descriptorPool = *device;
             context->descriptorSets = drawDescriptorSets;
             context->pipelineLayout = pipelineLayout;
 
@@ -234,7 +234,7 @@ namespace rnd {
         };
     };
 
-     void Renderer::Draw(){
+    void Renderer::Draw() {
         auto n_semaphore = currSemaphore;
         auto c_semaphore = int32_t((size_t(currSemaphore) + 1ull) % currentContext->framebuffers.size());
         currSemaphore = c_semaphore;
@@ -282,7 +282,7 @@ namespace rnd {
         };
 
         // present for displaying of this image
-		vk::Queue(currentContext->queue).presentKHR(vk::PresentInfoKHR(
+        vk::Queue(currentContext->queue).presentKHR(vk::PresentInfoKHR(
             1, &currentContext->framebuffers[c_semaphore].semaphore,
             1, &currentContext->swapchain,
             &currentBuffer, nullptr
@@ -290,7 +290,7 @@ namespace rnd {
     };
 
 
-     void Renderer::HandleData(){
+    void Renderer::HandleData() {
         auto tDiff = Shared::active.tDiff; // get computed time difference
 
         std::stringstream tDiffStream{ "" };

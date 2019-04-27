@@ -30,8 +30,8 @@ int main(int argc, char** argv) {
         renderer->Draw();
         renderer->HandleData();
     };
-    
-    glfwDestroyWindow(renderer->window); 
+
+    glfwDestroyWindow(renderer->window);
     glfwTerminate();
     return 0;
 };

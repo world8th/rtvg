@@ -30,11 +30,11 @@ namespace NSM {
 
     // context for rendering (can be switched)
     struct GraphicsContext : public std::enable_shared_from_this<GraphicsContext> {
-		std::shared_ptr<radx::Device> device;  // used device by context
-		uint32_t queueFamilyIndex = 0;
-		vk::Queue queue = {};
+        std::shared_ptr<radx::Device> device;  // used device by context
+        uint32_t queueFamilyIndex = 0;
+        vk::Queue queue = {};
         vk::SwapchainKHR swapchain = {};          // swapchain state
-		vk::CommandPool commandPool = {};
+        vk::CommandPool commandPool = {};
         vk::Pipeline pipeline = {};               // current pipeline
         vk::PipelineLayout pipelineLayout = {};
         vk::PipelineCache pipelineCache = {};
