@@ -1,0 +1,120 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : enable
+
+#define EXTEND_LOCAL_GROUPS
+#include "../include/driver.glsl"
+#include "../include/mathlib.glsl"
+#include "../include/ballotlib.glsl"
+
+
+#include "./includes.glsl"
+
+layout (local_size_x = BLOCK_SIZE) in;
+shared addrw_t localCounts[RADICES], addrL[VEC_SIZE][Wave_Size*ivectr], localPartitions[RADICES], prtsumL[VEC_SIZE][Wave_Size*ivectr];
+shared sgp_tp validAddressL[VEC_SIZE], prtMskL[VEC_SIZE][RADICES];
+shared m8pq utype_t keyL[VEC_SIZE][Wave_Size*ivectr];
+shared blocks_info blocks;
+
+#define addrW addrL[w][li]
+#define keyM keysIn[push_block.Shift&1].data[addrW]
+
+#ifndef INTERLEAVED_PARTITION
+#define prtsumW prtsumL[w][ln]
+#define fsLaneW fsLaneL[w][ln]
+#define keyW keyL[w][ln]
+#else
+#define prtsumW prtsumL[w][li]
+#define fsLaneW fsLaneL[w][li]
+#define keyW keyL[w][li]
+#endif
+
+#define bcount blocks.count
+
+const uint Wc = RADICES/Wave_Count;
+const uint BSIZE = min(Wc,Wave_Size);
+
+// 
+//layout ( binding = 0, set = InputKeys, rgba8ui ) uniform workgroupcoherent uimageBuffer keys[];
+  layout ( binding = 0, set = InputKeys, scalar ) readonly subgroupcoherent buffer KeysB { keytp_t data[]; } keys[];
+  layout ( binding = 0, set = InputKeys, scalar ) readonly subgroupcoherent buffer KeysInB { keytp_t data[]; } keysIn[];
+  layout ( binding = 0, set = InputKeys, scalar )          subgroupcoherent buffer KeysOutB { keytp_t data[]; } keysOut[];
+
+// 
+layout ( binding = 4, set = 0, scalar ) readonly workgroupcoherent buffer PrefixSumB { uint partitions[][RADICES]; };
+
+
+// 
+const lowp int blp = 8-bshift;
+void main() {
+    //const m8pq utype_t Radice_Idx = utype_t(gl_WorkGroupID.y * Wave_Count_RX + w);
+    //const lowp uint w = Wave_Idx, Wr = Wc * w;
+    const lowp uint w = Wave_Idx, wT = w>>VEC_SHIF, wC = Wave_Count_RT>>VEC_SHIF, ln = Lane_Idx;
+
+    // clear histogram of block (planned distribute threads)
+    [[unroll]] for (lowp uint rk=0u;rk<RADICES;rk+=gl_WorkGroupSize.x) { const lowp uint radice = rk + Local_Idx;
+        [[flatten]] if (radice < RADICES) { localPartitions[radice] = partitions[gl_WorkGroupID.x][radice], localCounts[radice] = 0u; };
+    };
+    [[flatten]] if (Local_Idx == 0) blocks = get_blocks_info(NumElements), bcount = min(blocks.count, 1048576u);
+    subgroupBarrier();
+    [[flatten]] IFANY (bcount <= 0) return;
+
+    // permute blocks by partitions
+    [[flatten]] if (w < VEC_SIZE) { [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = bitfieldInsert(i,ln,bshift,blp); addrW = blocks.offset + bitfieldInsert(i,Local_Idx,bshift,blp); }; };
+    subgroupBarrier();
+    
+    [[dependency_infinite]] for ( uint wk = 0; wk < bcount; wk++ ) {
+        btype_v predicate = btype_v(false);
+        [[flatten]] if (w < VEC_SIZE) { [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = bitfieldInsert(i,ln,bshift,blp);
+            predicate wmI = lessThan(addrW, addrw_t(blocks.limit));
+        }};
+        IFALL(all(not(predicate))) break;
+
+        // 
+#define prmskM prtMskL[w][uint(keyW)]
+#define validM validAddressL[w]
+#if (defined(AMD_PLATFORM))
+#define prmskL prmskM
+#define validL validM
+#else
+#define prmskL prmskM[i]
+#define validL validM[i]
+#endif
+
+        // 
+        [[flatten]] if (w < VEC_SIZE) { validM = sgpble(predicate);
+        [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = bitfieldInsert(i,ln,bshift,blp); keyW = extractKey(keyM, push_block.Shift); }};
+
+        // 
+        [[flatten]] if (w < VEC_SIZE) { [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = i*Wave_Size_RT + Lane_Idx; prmskM = DEF_MASK; }; };
+
+#ifndef ENABLE_SUBGROUP_PARTITION_SORT
+        subgroupBarrier();
+        [[unroll]] for (lowp uint w=0;w<VEC_SIZE;w++) 
+        [[unroll]] for (lowp uint r=0;r<RADICES;r+=wC) 
+#else
+        [[flatten]] if (w < VEC_SIZE) 
+#endif
+        {
+            [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = i*Wave_Size_RT + Lane_Idx; [[flatten]] if (keyW == sgpkpl) prmskL |= sgpexc(keyW) & validL; };
+
+#ifdef ENABLE_SUBGROUP_PARTITION_SORT
+            subgroupBarrier();
+            [[flatten]] if (w == 0u) [[unroll]] for (lowp uint w=0;w<VEC_SIZE;w++)  // critically calculate partition offset
+#endif
+            [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = i*Wave_Size_RT + Lane_Idx;
+                prtsumW = localCounts[uint(keyW)];
+                [[flatten]] if (Lane_Idx == lsb(prmskL) && prmskL > 0u) { atomicAdd(localCounts[uint(keyW)], bitcnt(prmskL), gl_ScopeSubgroup, gl_StorageSemanticsShared, gl_SemanticsRelaxed); };
+            };
+
+#ifdef ENABLE_SUBGROUP_PARTITION_SORT
+            subgroupBarrier();
+#endif
+            [[unroll]] for (lowp uint i=0;i<ivectr;i++) { const lowp uint li = i*Wave_Size_RT + Lane_Idx;
+                [[flatten]] if (bltinv(prmskL)) { keysOut[1-(push_block.Shift&1)].data[localPartitions[uint(keyW)] + prtsumW + sgpcnt(prmskL)] = keyM; addrW += ( (Wave_Size_RT<<bshift) << VEC_SHIF ); };
+            };
+        };
+#ifndef ENABLE_SUBGROUP_PARTITION_SORT
+        subgroupBarrier();
+#endif
+    };
+};

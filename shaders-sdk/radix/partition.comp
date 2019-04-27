@@ -1,0 +1,68 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : enable
+
+#define EXTEND_LOCAL_GROUPS
+#include "../include/driver.glsl"
+#include "../include/mathlib.glsl"
+#include "../include/ballotlib.glsl"
+
+// default values
+#include "./includes.glsl"
+
+
+// current work group size
+const uint WG_COUNT = 144u;
+
+// shared memory of...
+shared uint localPartitions[RADICES];
+shared uint localPartSum[16u];
+
+// local size 
+const uint local_size_def = Wave_Size * 16u;
+layout ( local_size_x = local_size_def) in; // use many as possible
+
+// 
+layout ( binding = 3, set = 0, scalar ) readonly subgroupcoherent buffer HistogramB {uint counts[][RADICES]; };
+layout ( binding = 4, set = 0, scalar )          subgroupcoherent buffer PrefixSumB {uint partitions[][RADICES]; };
+
+// X axis is workgroup count, Y is radices
+void main() {
+    [[flatten]] if (Local_Idx < RADICES) localPartitions[Local_Idx] = 0u;
+    subgroupBarrier();
+
+    [[unroll]] for (lowp uint rk=0u;rk<RADICES;rk+=Wave_Count_RX) {
+        const lowp uint radice = rk + Wave_Idx;
+
+        // calculate partitions by work-groups for every radice
+        [[unroll]] for (lowp uint gp=0u;gp<WG_COUNT;gp+=Wave_Size_RX) {
+            const lowp uint workgroup = gp+Lane_Idx;
+            const highp uvec4 mask = subgroupBallot(workgroup < WG_COUNT && radice < RADICES);
+            const uint 
+                histv = subgroupInverseBallot(mask) ? counts[workgroup][radice] : 0u,
+                scan = subgroupExclusiveAdd(histv), 
+                sum = subgroupShuffle(histv + scan, subgroupBallotFindMSB(mask));
+
+            uint pref = localPartitions[radice]; [[flatten]] if (electedInvoc()) { localPartitions[radice] += sum; }; //pref = readFLane(pref);
+            [[flatten]] if (subgroupInverseBallot(mask)) { partitions[workgroup][radice] = (pref + scan); };
+        };
+    };
+    
+    subgroupBarrier();
+    [[unroll]] for (lowp uint gp=0u;gp<WG_COUNT;gp+=Wave_Count_RX) {
+        const lowp uint workgroup = gp + Wave_Idx;
+
+        // calculate partition offsets of every radice
+        uint partsum = 0u;
+        [[unroll]] for (lowp uint rk=0u;rk<RADICES;rk+=Wave_Size_RX) {
+            const lowp uint radice = rk + Lane_Idx;
+            const highp uvec4 mask = subgroupBallot(workgroup < WG_COUNT && radice < RADICES);
+            const uint 
+                histv = subgroupInverseBallot(mask) ? localPartitions[radice] : 0u,
+                scan = subgroupExclusiveAdd(histv),
+                sum = subgroupShuffle(histv + scan, subgroupBallotFindMSB(mask));
+
+            uint pref = readFLane(partsum); [[flatten]] if (electedInvoc()) { partsum += sum; }; //pref = readFLane(pref);
+            [[flatten]] if (subgroupInverseBallot(mask)) { partitions[workgroup][radice] += (pref + scan); };
+        };
+    };
+};

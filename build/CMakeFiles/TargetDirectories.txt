@@ -1,0 +1,3 @@
+C:/Data/Projects/rtvg/build/CMakeFiles/sort-test.dir
+C:/Data/Projects/rtvg/build/CMakeFiles/ALL_BUILD.dir
+C:/Data/Projects/rtvg/build/CMakeFiles/ZERO_CHECK.dir

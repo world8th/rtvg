@@ -103,3 +103,9 @@ Cargo.lock
 *.exe
 *.out
 *.app
+
+# 
+ipch/*
+*/ipch/*
+ipch/
+*/ipch/

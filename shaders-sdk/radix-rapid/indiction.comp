@@ -1,0 +1,29 @@
+#version 460 core
+#extension GL_GOOGLE_include_directive : enable
+
+#include "../include/driver.glsl"
+#include "../include/mathlib.glsl"
+#include "../include/ballotlib.glsl"
+
+#define COPY_HACK_IDENTIFY // buffer names was swapped
+#include "./includes.glsl"
+
+const uint local_size_def = Wave_Size*4u;
+layout (local_size_x = local_size_def) in; // use many as possible
+
+layout ( binding = 0, set = 1, scalar ) readonly subgroupcoherent buffer KeyInB { KEYTYPE data[]; } keyIn[];
+layout ( binding = 2, set = 0, scalar )          subgroupcoherent buffer KeyExB { KEYTYPE data[]; } keyExtra[];
+layout ( binding = 0, set = 0, scalar )          subgroupcoherent buffer PtrSwB { uint32_t data[]; } ptrs[];
+
+void main() {
+    const uint wsize = NumElements;
+    IFANY (wsize <= 0) return; const uint wcount = min(tiled(wsize, gl_WorkGroupSize.x), 2097152u);
+
+    [[dependency_infinite]] for (uint w=0;w<wcount;w+=gl_NumWorkGroups.x) {
+        const uint globalID = (w + gl_WorkGroupID.x) * gl_WorkGroupSize.x + Local_Idx;
+        const bool validAddress = lessThan(globalID, wsize); //IFALL (!validAddress) break;
+
+        // currently only copying support
+        [[flatten]] if (validAddress) { ptrs[0].data[globalID] = globalID, keyExtra[0].data[globalID] = keyIn[0].data[globalID]; };
+    };
+};
