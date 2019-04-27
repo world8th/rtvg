@@ -62,6 +62,137 @@ namespace radx {
 
 
 
+	VmaAllocatedImage::VmaAllocatedImage(
+		const std::shared_ptr<radx::Device>& device,
+		vk::ImageViewType imageViewType, 
+		vk::Format format,
+		vk::Extent2D dsize,
+		vk::ImageUsageFlags imageUsage,
+		VmaMemoryUsage vmaUsage, 
+		bool alwaysMapped
+	) {
+		// result will no fully handled
+		VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+
+		// init image dimensional type
+		vk::ImageType imageType = vk::ImageType::e2D; bool isCubemap = false;
+		switch (vk::ImageViewType(imageViewType)) {
+			case vk::ImageViewType::e1D: imageType = vk::ImageType::e1D; break;
+			case vk::ImageViewType::e1DArray: imageType = vk::ImageType::e2D; break;
+			case vk::ImageViewType::e2D: imageType = vk::ImageType::e2D; break;
+			case vk::ImageViewType::e2DArray: imageType = vk::ImageType::e3D; break;
+			case vk::ImageViewType::e3D: imageType = vk::ImageType::e3D; break;
+			case vk::ImageViewType::eCube: imageType = vk::ImageType::e3D; isCubemap = true; break;
+			case vk::ImageViewType::eCubeArray: imageType = vk::ImageType::e3D; isCubemap = true; break;
+		};
+
+
+		// additional usage
+		//auto usage = vk::ImageUsageFlags(cinfo.usage) | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eTransferSrc;
+		auto usage = VkImageUsageFlags(imageUsage) | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+		// image memory descriptor
+#ifdef VRT_ENABLE_VEZ_INTEROP
+		auto imageInfo = VezImageCreateInfo{};
+#else
+		auto imageInfo = VkImageCreateInfo(vk::ImageCreateInfo{});
+		imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		imageInfo.sharingMode = VkSharingMode(vk::SharingMode::eExclusive);
+#endif
+
+		// unified create structure
+		imageInfo.pNext = nullptr;
+		imageInfo.imageType = VkImageType(imageType);
+		imageInfo.arrayLayers = 1; // unsupported
+		imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageInfo.extent = VkExtent3D{ dsize.width, dsize.height, (isCubemap ? 6u : 1u) };
+		imageInfo.format = VkFormat(format);
+		imageInfo.mipLevels = 1;
+		imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageInfo.usage = usage;
+		imageInfo.flags = {};
+
+		imageInfo.queueFamilyIndexCount = 0;//device->_familyIndices.size();
+		imageInfo.pQueueFamilyIndices = nullptr;//device->_familyIndices.data();
+
+
+
+		// create image with allocation
+#ifdef VRT_ENABLE_VEZ_INTEROP
+		VezMemoryFlags mem = VEZ_MEMORY_GPU_ONLY;
+		if (vezCreateImage(device->_device, mem, &imageInfo, &vtDeviceImage->_image) == VK_SUCCESS) { result = VK_SUCCESS; };
+#else
+		VmaAllocationCreateInfo allocCreateInfo = {};
+		allocCreateInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		if (vmaCreateImage(*device, &imageInfo, &allocCreateInfo, (VkImage*)&image, &allocation, &allocationInfo) == VK_SUCCESS) { result = VK_SUCCESS; };
+#endif
+
+
+		// subresource range
+		srange.levelCount = 1;
+		srange.layerCount = 1;
+		srange.baseMipLevel = 0;
+		srange.baseArrayLayer = 0;
+		srange.aspectMask = vk::ImageAspectFlagBits::eColor;
+
+		// subresource layers
+		slayers.layerCount = srange.layerCount;
+		slayers.baseArrayLayer = srange.baseArrayLayer;
+		slayers.aspectMask = srange.aspectMask;
+		slayers.mipLevel = srange.baseMipLevel;
+
+
+		// image view for usage
+#ifdef VRT_ENABLE_VEZ_INTEROP
+		auto vinfo = VezImageViewCreateInfo{};
+		vinfo.subresourceRange = *(VezImageSubresourceRange*)(&vtDeviceImage->_subresourceRange.baseMipLevel);
+#else
+		auto vinfo = VkImageViewCreateInfo(vk::ImageViewCreateInfo{});
+		vinfo.subresourceRange = srange;
+		vinfo.flags = {};
+#endif
+		vinfo.pNext = nullptr;
+		vinfo.components = VkComponentMapping{ VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
+		vinfo.format = VkFormat(format);
+		vinfo.image = image;
+		vinfo.viewType = VkImageViewType(imageViewType);
+
+#ifdef VRT_ENABLE_VEZ_INTEROP
+		vezCreateImageView(device->_device, &vinfo, &vtDeviceImage->_imageView);
+		vtDeviceImage->_initialLayout = vtDeviceImage->_layout;
+#else
+		imageView = vk::Device(*device).createImageView(vk::ImageViewCreateInfo(vinfo));
+#endif
+
+		// anyways create static descriptor
+		imageDesc = { {}, imageView, layout };
+	};
+
+
+
+	// Get mapped memory
+	void* VmaAllocatedImage::map() {
+		if (this->usage == VMA_MEMORY_USAGE_GPU_ONLY && !allocationInfo.pMappedData) {
+			vmaMapMemory(*device, allocation, &mappedData);
+		}
+		else {
+			mappedData = allocationInfo.pMappedData;
+		};
+		return mappedData;
+	};
+
+	// GPU unmap memory
+	void VmaAllocatedImage::unmap() {
+		if (this->usage == VMA_MEMORY_USAGE_GPU_ONLY && mappedData) {
+			vmaUnmapMemory(*device, allocation);
+		};
+	};
+
+
+
+
+
     std::shared_ptr<Device> Device::initialize(const vk::Device& device, std::shared_ptr<radx::PhysicalDeviceHelper> physicalHelper) {
         this->physicalHelper = physicalHelper;
         this->device = device;

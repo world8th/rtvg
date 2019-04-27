@@ -214,19 +214,30 @@ namespace rnd {
     public: 
         GLFWwindow* window = nullptr; // bound GLFW window
 
-        std::shared_ptr<CameraController> cameraController = nullptr;
-        std::shared_ptr<vte::ComputeFramework> appBase = nullptr;
-        std::shared_ptr<vte::GraphicsContext> currentContext = nullptr;
+		operator vk::Instance& () { return appBase->instance; }
+		operator const vk::Instance&() const { return appBase->instance; }
+		operator vk::Queue& () { return appBase->queue; }
+		operator const vk::Queue& () const { return appBase->queue; }
+		operator vk::RenderPass& () { return appBase->renderpass; }
+		operator const vk::RenderPass& () const { return appBase->renderpass; }
+
+		// vRt-based (legacy) rendering model
+		std::shared_ptr<vte::ComputeFramework> appBase = nullptr;
+		std::shared_ptr<vte::GraphicsContext> currentContext = nullptr;
+		std::shared_ptr<CameraController> cameraController = nullptr;
+
+		// RadX-based object system
 		std::shared_ptr<radx::Device> device;
-		std::shared_ptr<radx::Radix> program;
-		std::shared_ptr<radx::Sort<radx::Radix>> radixSort;
+
+		// just helpers 
 		std::shared_ptr<radx::PhysicalDeviceHelper> physicalHelper;
-		std::shared_ptr<radx::InputInterface> inputInterface;
-		std::shared_ptr<ComputeFramework> fw;
 		std::shared_ptr<radx::VmaAllocatedBuffer> vmaDeviceBuffer, vmaToHostBuffer, vmaHostBuffer;//, vmaToDeviceBuffer;
-		vk::RenderPass renderpass;
-		vk::Instance instance;
-		std::vector<vk::DescriptorSet> drawDescriptorSets;
+
+		// output image allocation
+		std::shared_ptr<radx::VmaAllocatedImage> outputImage;
+
+
+		std::vector<vk::DescriptorSet> drawDescriptorSets = {};
 
         bool enableAdvancedAcceleration = true;
         float guiScale = 1.0f;

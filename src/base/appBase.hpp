@@ -34,17 +34,7 @@ namespace NSM
 
 	class ComputeFramework {
 	protected:
-		vk::Queue queue = {};
-		vk::Device device = {};
-		vk::Instance instance = {};
-		vk::PhysicalDevice physicalDevice = {};
-		vk::Fence fence = {};
-		vk::CommandPool commandPool = {};
-		vk::RenderPass renderpass = {};
-		
 
-		std::vector<vk::PhysicalDevice> physicalDevices = {};
-		std::vector<uint32_t> queueFamilyIndices = {};
 
 		// instance extensions
 		std::vector<const char*> wantedExtensions = {
@@ -136,7 +126,18 @@ namespace NSM
 	public:
 		ComputeFramework() {};
 
-		vk::Instance createInstance();
+		vk::Queue queue = {};
+		vk::Device device = {};
+		vk::Instance instance = {};
+		vk::PhysicalDevice physicalDevice = {};
+		vk::Fence fence = {};
+		vk::CommandPool commandPool = {};
+		vk::RenderPass renderpass = {};
+		uint32_t queueFamilyIndex = 0;
+
+		std::vector<vk::PhysicalDevice> physicalDevices = {};
+		std::vector<uint32_t> queueFamilyIndices = {};
+
 		//vk::Device createDevice(bool isComputePrior = true, std::string shaderPath = "./", bool enableAdvancedAcceleration = true);
 
 		const vk::PhysicalDevice& getPhysicalDevice(const uint32_t& gpuID) { return (physicalDevice = physicalDevices[gpuID]); };
@@ -307,7 +308,7 @@ namespace NSM
 			// compute/graphics queue family
 			for (auto queuefamily : gpuQueueProps) {
 				graphicsFamilyIndex++;
-				if (queuefamily.queueFlags & (vk::QueueFlagBits::eCompute)) {
+				if (queuefamily.queueFlags & (vk::QueueFlagBits::eCompute) && queuefamily.queueFlags & (vk::QueueFlagBits::eGraphics)) {
 					queueCreateInfos.push_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags()).setQueueFamilyIndex(graphicsFamilyIndex).setQueueCount(1).setPQueuePriorities(&priority));
 					queueFamilyIndices.push_back(graphicsFamilyIndex);
 					break;
@@ -326,10 +327,12 @@ namespace NSM
 			};
 
 			// return device with queue pointer
+			const uint32_t qptr = 0;
 			this->fence = this->device.createFence(vk::FenceCreateInfo().setFlags({}));
-			this->commandPool = this->device.createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer), queueFamilyIndices[0]));
-			this->queue = this->device.getQueue(queueFamilyIndices[0], 0); // deferred getting of queue
-
+			this->queueFamilyIndex = queueFamilyIndices[qptr];
+			this->commandPool = this->device.createCommandPool(vk::CommandPoolCreateInfo(vk::CommandPoolCreateFlags(vk::CommandPoolCreateFlagBits::eResetCommandBuffer), queueFamilyIndex));
+			this->queue = this->device.getQueue(queueFamilyIndex, 0); // deferred getting of queue
+			
 			// 
 			return device;
         }

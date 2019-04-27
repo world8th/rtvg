@@ -24,6 +24,8 @@
 #include <cfenv>
 #include <ios>
 #include <sstream>
+#include <chrono>
+
 
 #ifdef USE_CIMG
 #include "tinyexr.h"

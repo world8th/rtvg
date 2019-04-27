@@ -51,6 +51,62 @@ namespace radx {
         vk::DescriptorBufferInfo bufInfo = {};
     };
 
+	class VmaAllocatedImage : public std::enable_shared_from_this<VmaAllocatedImage> {
+	public:
+		void* mappedData = {};
+		vk::Image image;
+		vk::ImageView imageView;
+		vk::ImageLayout layout;
+		vk::ImageSubresourceRange  srange;
+		vk::ImageSubresourceLayers slayers;
+		VmaAllocation allocation;
+		VmaAllocationInfo allocationInfo;
+		VmaMemoryUsage usage = VMA_MEMORY_USAGE_GPU_ONLY;
+		std::shared_ptr<radx::Device> device;
+		vk::DescriptorImageInfo imageDesc;
+
+	public:
+		VmaAllocatedImage();
+		VmaAllocatedImage(
+			const std::shared_ptr<radx::Device>& device,
+			vk::ImageViewType imageViewType = vk::ImageViewType::e2D,
+			vk::Format format = vk::Format::eR8G8B8A8Unorm,
+			vk::Extent2D dsize = { 2,2 },
+			vk::ImageUsageFlags bufferUsage = vk::ImageUsageFlagBits::eStorage,
+			VmaMemoryUsage vmaUsage = VMA_MEMORY_USAGE_GPU_ONLY, bool alwaysMapped = false
+		);
+
+		~VmaAllocatedImage() {
+			vmaDestroyImage(*device, *this, allocation);
+		};
+
+		// Get mapped memory
+		void* map();
+
+		// GPU unmap memory
+		void unmap();
+
+		// vk::Device caster
+		//operator vk::Buffer&() { return buffer; };
+		operator const vk::Image& () const { return image; };
+		operator const VkImage& () const { return (VkImage&)image; };
+
+		// Allocation
+		//operator VmaAllocation&() { return allocation; };
+		operator const VmaAllocation& () const { return allocation; };
+
+		// AllocationInfo
+		//operator VmaAllocationInfo&() { return allocationInfo; };
+		operator const VmaAllocationInfo& () const { return allocationInfo; };
+
+		// 
+		operator const vk::ImageView& () const { return imageView; };
+	};
+
+
+
+
+
     // TODO: buffer copying data and zero-initializer
     template<class T>
     class BufferRegion {
@@ -142,6 +198,11 @@ namespace radx {
     protected:
         std::shared_ptr<BufferRegion<T>> region = {};
     };
+
+
+
+
+
 
 
 };

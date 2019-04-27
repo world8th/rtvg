@@ -4,6 +4,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #define VTE_RENDERER_IMPLEMENTATION
+#define VMA_IMPLEMENTATION
+#define RADX_IMPLEMENTATION
 
 #include "../base/appRenderer.hpp"
 
@@ -62,7 +64,8 @@ namespace rnd {
         cameraController->upVector = &this->upVector;
         cameraController->viewVector = &this->viewVector;
 
-        instance = appBase->createInstance();
+		// create VK instance
+        auto instance = appBase->createInstance();
         if (!instance) { glfwTerminate(); exit(EXIT_FAILURE); }
 
         // get physical devices
@@ -95,10 +98,7 @@ namespace rnd {
 		// create radix sort application (RadX C++)
 		physicalHelper = std::make_shared<radx::PhysicalDeviceHelper>(appBase->getPhysicalDevice(0));
 		device = std::make_shared<radx::Device>()->initialize(appBase->createDevice(false, shaderPack, true), physicalHelper);
-		program = std::make_shared<radx::Radix>(), program->initialize(device);
-		//radixSort = std::make_shared<radx::Sort<radx::Radix>>(), radixSort->initialize(device, program, elementCount);
-		inputInterface = std::make_shared<radx::InputInterface>(device);
-		renderpass = appBase->createRenderpass(device);
+		appBase->createRenderpass(device);
 
 
         // create image output
@@ -183,7 +183,7 @@ namespace rnd {
                     .setPAttachments(colorBlendAttachments.data())
                     .setAttachmentCount(colorBlendAttachments.size()))
                 .setLayout(pipelineLayout)
-                .setRenderPass(renderpass)
+                .setRenderPass(appBase->renderpass)
                 .setBasePipelineIndex(0)
                 .setPMultisampleState(&vk::PipelineMultisampleStateCreateInfo().setRasterizationSamples(vk::SampleCountFlagBits::e1))
                 .setPDynamicState(&vk::PipelineDynamicStateCreateInfo().setPDynamicStates(dynamicStates.data()).setDynamicStateCount(dynamicStates.size()))
@@ -191,27 +191,26 @@ namespace rnd {
         };
 
         { // write descriptors for showing texture
-			// TODO: outputImage and images support
+			outputImage = std::make_shared<radx::VmaAllocatedImage>(device, vk::ImageViewType::e2D, vk::Format::eR32G32B32A32Sfloat, appBase->applicationWindow.surfaceSize, vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eStorage);
 
-            /*vk::SamplerCreateInfo samplerInfo = {};
+            vk::SamplerCreateInfo samplerInfo = {};
             samplerInfo.addressModeU = vk::SamplerAddressMode::eClampToEdge;
             samplerInfo.addressModeV = vk::SamplerAddressMode::eClampToEdge;
             samplerInfo.minFilter = vk::Filter::eLinear;
             samplerInfo.magFilter = vk::Filter::eLinear;
             samplerInfo.compareEnable = false;
-            auto sampler = deviceQueue->device->logical.createSampler(samplerInfo); // create sampler
-            auto image = outputImage;
+            auto sampler = vk::Device(*device).createSampler(samplerInfo); // create sampler
 
             // desc texture texture
             vk::DescriptorImageInfo imageDesc = {};
-            imageDesc.imageLayout = vk::ImageLayout(image->_layout);
-            imageDesc.imageView = vk::ImageView(image->_imageView);
+            imageDesc.imageLayout = vk::ImageLayout(outputImage->layout);
+            imageDesc.imageView = vk::ImageView(outputImage->imageView);
             imageDesc.sampler = sampler;
 
             // update descriptors
-            deviceQueue->device->logical.updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
+			vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
                 vk::WriteDescriptorSet().setDstSet(descriptorSets[0]).setDstBinding(0).setDstArrayElement(0).setDescriptorCount(1).setDescriptorType(vk::DescriptorType::eCombinedImageSampler).setPImageInfo(&imageDesc),
-            }, nullptr);*/
+            }, nullptr);
         };
 
         currentContext = std::make_shared<vte::GraphicsContext>();
@@ -219,6 +218,9 @@ namespace rnd {
             auto context = currentContext;
 
             // create graphics context
+			context->queueFamilyIndex = appBase->queueFamilyIndex;
+			context->queue = appBase->queue;
+			context->commandPool = appBase->commandPool;
             context->device = device;
             context->pipeline = trianglePipeline;
 			context->descriptorPool = *device;
@@ -226,7 +228,7 @@ namespace rnd {
             context->pipelineLayout = pipelineLayout;
 
             // create framebuffers by size
-            context->renderpass = renderpass;
+            context->renderpass = appBase->renderpass;
             context->swapchain = appBase->createSwapchain(device);
             context->framebuffers = appBase->createSwapchainFramebuffer(device, context->swapchain, context->renderpass);
         };
@@ -249,7 +251,7 @@ namespace rnd {
             // create command buffer (with rewrite)
             vk::CommandBuffer& commandBuffer = currentContext->framebuffers[n_semaphore].commandBuffer;
             if (!commandBuffer) {
-                commandBuffer = vte::createCommandBuffer(*currentContext->device, *currentContext->device, false, false); // do reference of cmd buffer
+                commandBuffer = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, false, false); // do reference of cmd buffer
                 commandBuffer.beginRenderPass(vk::RenderPassBeginInfo(currentContext->renderpass, currentContext->framebuffers[currentBuffer].frameBuffer, renderArea, clearValues.size(), clearValues.data()), vk::SubpassContents::eInline);
                 commandBuffer.setViewport(0, std::vector<vk::Viewport> { viewport });
                 commandBuffer.setScissor(0, std::vector<vk::Rect2D> { renderArea });
@@ -273,14 +275,14 @@ namespace rnd {
                 .setPSignalSemaphores(signalSemaphores.data()).setSignalSemaphoreCount(signalSemaphores.size());
 
             // submit command once
-            vte::submitCmd(*currentContext->device, *currentContext->device, { commandBuffer }, smbi);
+            radx::submitCmd(*currentContext->device, currentContext->queue, { commandBuffer }, smbi);
 
             // delete command buffer 
             //{ currentContext->queue->device->logical.freeCommandBuffers(currentContext->queue->commandPool, { commandBuffer }); commandBuffer = nullptr; };
         };
 
         // present for displaying of this image
-		vk::Queue(*currentContext->device).presentKHR(vk::PresentInfoKHR(
+		vk::Queue(currentContext->queue).presentKHR(vk::PresentInfoKHR(
             1, &currentContext->framebuffers[c_semaphore].semaphore,
             1, &currentContext->swapchain,
             &currentBuffer, nullptr

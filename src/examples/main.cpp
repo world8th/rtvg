@@ -1,8 +1,8 @@
 //#pragma once
 
+//#define VMA_IMPLEMENTATION
+//#define RADX_IMPLEMENTATION
 #include "../base/appRenderer.hpp"
-#define VMA_IMPLEMENTATION
-#define RADX_IMPLEMENTATION
 
 // initial renderer
 const uint32_t canvasWidth = 640, canvasHeight = 360; // 
