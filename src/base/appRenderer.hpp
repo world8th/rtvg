@@ -236,8 +236,12 @@ namespace rnd {
         // output image allocation
         std::shared_ptr<radx::VmaAllocatedImage> outputImage;
 
-
+        vk::DescriptorSetLayout inputDescriptorLayout;
+        vk::DescriptorSet inputDescriptorSet;
         std::vector<vk::DescriptorSet> drawDescriptorSets = {};
+
+        std::vector<vk::AccelerationStructureNV> accelerationTemplates;
+        vk::AccelerationStructureNV accelerationScene;
 
         bool enableAdvancedAcceleration = true;
         float guiScale = 1.0f;

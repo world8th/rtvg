@@ -116,6 +116,18 @@ namespace rnd {
 
     };
 
+
+    struct VkGeometryInstance {
+        //float transform[12];
+        glm::mat3x4 transform;
+        uint32_t instanceId : 24;
+        uint32_t mask : 8;
+        uint32_t instanceOffset : 24;
+        uint32_t flags : 8;
+        uint64_t accelerationStructureHandle;
+    };
+
+
     void Renderer::InitCommands() {
 
     };
@@ -127,27 +139,22 @@ namespace rnd {
 
         // 
         using Point = std::array<float, 2>;
-        std::vector<std::vector<Point>> polygon;
 
         // make polygons
-        polygon.push_back({ {100, 0}, {100, 100}, {0, 100}, {0, 0} });
-        polygon.push_back({ {75, 25}, {75, 75}, {25, 75}, {25, 25} });
+        std::vector<std::vector<Point>> pgeometries;
+        pgeometries.push_back({ {100, 0}, {100, 100}, {0, 100}, {0, 0} });
+        pgeometries.push_back({ {75, 25}, {75, 75}, {25, 75}, {25, 25} });
 
         // get indices 
-        std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+        std::vector<uint32_t>  indices = mapbox::earcut<uint32_t>(pgeometries);
+        std::vector<glm::vec3> vertice = {};
 
-        // 
-        std::vector<std::vector<glm::vec3>> cinstances;
+        // merge into VEC3 array 
         float fdepth = 0.f;
-        for (auto &I : polygon) {
-            std::vector<glm::vec3> poly;
+        for (auto &I : pgeometries) {
             float dp = fdepth; fdepth += 0.01f;
-            for (auto& p : I) {
-                poly.push_back({ p[0],p[1],dp });
-            }
-            cinstances.push_back(poly);
+            for (auto& p : I) { vertice.push_back({ p[0],p[1],dp }); }
         }
-
         
         // get memory size and set max element count
         vk::DeviceSize memorySize = 1024 * 1024 * 32;
@@ -157,17 +164,172 @@ namespace rnd {
             vmaHostBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc, VMA_MEMORY_USAGE_CPU_TO_GPU);
         };
 
-        // 
-        auto vertexHostVector = radx::Vector<glm::vec3>(vmaHostBuffer, 1024 * 1024 * sizeof(glm::vec3), 0);
-        auto indiceHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * 1024 * sizeof(uint32_t), vertexHostVector.range());
+        // buffer helpers
+        auto vertexHostVector = radx::Vector<glm::vec3>(vmaHostBuffer, 1024 * sizeof(glm::vec3), 0);
+        auto indiceHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * sizeof(uint32_t), vertexHostVector.range());
+        auto instanceHostVector = radx::Vector<VkGeometryInstance>(vmaHostBuffer, 1024 * sizeof(uint32_t), indiceHostVector.offset()+indiceHostVector.range());
+        auto scratchHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * 1024, instanceHostVector.offset() + instanceHostVector.range());
 
         // 
-        auto vertexDeviceVector = radx::Vector<glm::vec3>(vmaDeviceBuffer, 1024 * 1024 * sizeof(glm::vec3), 0);
-        auto indiceDeviceVector = radx::Vector<uint32_t>(vmaDeviceBuffer, 1024 * 1024 * sizeof(uint32_t), vertexDeviceVector.range());
+        //auto vertexDeviceVector = radx::Vector<glm::vec3>(vmaDeviceBuffer, 1024 * sizeof(glm::vec3), 0);
+        //auto indiceDeviceVector = radx::Vector<uint32_t>(vmaDeviceBuffer, 1024 * sizeof(uint32_t), vertexDeviceVector.range());
 
 
 
-        // TODO: RTX initialization
+
+
+
+
+        { // Templates Creation
+
+            // triangles
+            vk::GeometryNV rtg = {};
+            rtg.geometryType = vk::GeometryTypeNV::eTriangles;
+            rtg.geometry.triangles.indexCount = indices.size();
+            rtg.geometry.triangles.indexData = indiceHostVector;
+            rtg.geometry.triangles.indexOffset = indiceHostVector.offset();
+            rtg.geometry.triangles.indexType = vk::IndexType::eUint32;
+            rtg.geometry.triangles.vertexCount = vertice.size();
+            rtg.geometry.triangles.vertexStride = sizeof(glm::vec3);
+            rtg.geometry.triangles.vertexData = vertexHostVector;
+            rtg.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
+            rtg.geometry.triangles.vertexOffset = vertexHostVector.offset();
+
+            // instances
+            vk::AccelerationStructureInfoNV dAS = {};
+            dAS.flags = vk::BuildAccelerationStructureFlagBitsNV::ePreferFastTrace;
+            dAS.type = vk::AccelerationStructureTypeNV::eBottomLevel;
+            dAS.geometryCount = 1;
+            dAS.pGeometries = &rtg;
+
+            // create acceleration structure object
+            vk::AccelerationStructureCreateInfoNV cAS = {};
+            cAS.info = dAS;
+            auto acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
+            
+            // get memory requirements
+            vk::AccelerationStructureMemoryRequirementsInfoNV memv;
+            memv.accelerationStructure = acceleration;
+            memv.type = vk::AccelerationStructureMemoryRequirementsTypeNV::eObject;
+            auto objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
+
+            // allocated memory 
+            VmaAllocation allocation; VmaAllocationInfo allocationInfo;
+            VmaAllocationCreateInfo vmac;
+            vmac.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+            vmaAllocateMemory(*device, (VkMemoryRequirements*)&objectMem.memoryRequirements, &vmac, &allocation, &allocationInfo);
+
+            // bind memory
+            vk::BindAccelerationStructureMemoryInfoNV bs;
+            bs.accelerationStructure = acceleration;
+            bs.memory = allocationInfo.deviceMemory;
+            bs.memoryOffset = allocationInfo.offset;
+            vk::Device(*device).bindAccelerationStructureMemoryNV(bs);
+
+            // build structure
+            radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
+                vk::CommandBuffer(cmd).buildAccelerationStructureNV(dAS, nullptr, 0, false, acceleration, nullptr, scratchHostVector, scratchHostVector.offset());
+                radx::commandBarrier(cmd);
+            });
+
+            // push to instances array
+            accelerationTemplates.push_back(acceleration);
+        }
+
+        { // Instances Creation
+
+            // create instances
+            VkGeometryInstance ginstance;
+            ginstance.instanceId = 0;
+            ginstance.instanceOffset = 0;
+            ginstance.mask = 0xFF;
+            ginstance.flags = VkGeometryInstanceFlagBitsNV::VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_NV;
+            vk::Device(*device).getAccelerationStructureHandleNV(accelerationTemplates[0], sizeof(uint64_t), &ginstance.accelerationStructureHandle);
+            instanceHostVector.map()[0] = ginstance;
+
+            // instances
+            vk::AccelerationStructureInfoNV dAS = {};
+            dAS.flags = vk::BuildAccelerationStructureFlagBitsNV::ePreferFastBuild | vk::BuildAccelerationStructureFlagBitsNV::eAllowUpdate | vk::BuildAccelerationStructureFlagBitsNV::eAllowCompaction;
+            dAS.type = vk::AccelerationStructureTypeNV::eTopLevel;
+            dAS.instanceCount = 1;
+
+            // create acceleration structure object
+            vk::AccelerationStructureCreateInfoNV cAS = {};
+            cAS.info = dAS;
+            auto acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
+
+            // get memory requirements
+            vk::AccelerationStructureMemoryRequirementsInfoNV memv;
+            memv.accelerationStructure = acceleration;
+            memv.type = vk::AccelerationStructureMemoryRequirementsTypeNV::eObject;
+            auto objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
+
+            // allocated memory 
+            VmaAllocation allocation; VmaAllocationInfo allocationInfo;
+            VmaAllocationCreateInfo vmac;
+            vmac.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+            vmaAllocateMemory(*device, (VkMemoryRequirements*)& objectMem.memoryRequirements, &vmac, &allocation, &allocationInfo);
+
+            // bind memory
+            vk::BindAccelerationStructureMemoryInfoNV bs;
+            bs.accelerationStructure = acceleration;
+            bs.memory = allocationInfo.deviceMemory;
+            bs.memoryOffset = allocationInfo.offset;
+            vk::Device(*device).bindAccelerationStructureMemoryNV(bs);
+
+            // build structure
+            radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
+                vk::CommandBuffer(cmd).buildAccelerationStructureNV(dAS, instanceHostVector, instanceHostVector.offset(), false, acceleration, nullptr, scratchHostVector, scratchHostVector.offset());
+                radx::commandBarrier(cmd);
+            });
+
+            // push to instances array
+            //accelerationTemplates.push_back(acceleration);
+            accelerationScene = acceleration;
+        }
+
+        { // Descriptor Layout 
+            const auto pbindings = vk::DescriptorBindingFlagBitsEXT::ePartiallyBound | vk::DescriptorBindingFlagBitsEXT::eUpdateAfterBind | vk::DescriptorBindingFlagBitsEXT::eVariableDescriptorCount | vk::DescriptorBindingFlagBitsEXT::eUpdateUnusedWhilePending;
+            const auto vkfl = vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT().setPBindingFlags(&pbindings);
+            const auto vkpi = vk::DescriptorSetLayoutCreateInfo().setPNext(&vkfl);
+
+            {
+                const std::vector<vk::DescriptorSetLayoutBinding> _bindings = {
+                    vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
+                    vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
+                    vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eAll),
+                    vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eAccelerationStructureNV, 1, vk::ShaderStageFlagBits::eAll),
+                };
+                inputDescriptorLayout = vk::Device(*device).createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo(vkpi).setPBindings(_bindings.data()).setBindingCount(_bindings.size()));
+            };
+        }
+
+        {
+            std::vector<vk::DescriptorSetLayout> dsLayouts = { vk::DescriptorSetLayout(inputDescriptorLayout) };
+
+            // create pipeline layout
+            auto dsc = vk::Device(*device).allocateDescriptorSets(vk::DescriptorSetAllocateInfo().setDescriptorPool(*device).setPSetLayouts(&dsLayouts[0]).setDescriptorSetCount(1));
+            inputDescriptorSet = dsc[0];
+
+            // acceleration structure write descriptor
+            vk::WriteDescriptorSetAccelerationStructureNV acx;
+            acx.pAccelerationStructures = &accelerationScene;
+            acx.accelerationStructureCount = 1;
+
+            auto writeTmpl = vk::WriteDescriptorSet(inputDescriptorSet, 0, 0, 1, vk::DescriptorType::eStorageBuffer);
+            std::vector<vk::WriteDescriptorSet> writes = {
+                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageBuffer).setDstBinding(0).setPBufferInfo(&vk::DescriptorBufferInfo(vertexHostVector)),
+                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageBuffer).setDstBinding(1).setPBufferInfo(&vk::DescriptorBufferInfo(indiceHostVector)),
+                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageImage).setDstBinding(2).setPImageInfo(&vk::DescriptorImageInfo(*outputImage)),
+                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eAccelerationStructureNV).setDstBinding(3).setPNext(&acx)
+            };
+            vk::Device(*device).updateDescriptorSets(writes, {});
+        };
+
+
+
+
+        // TODO: Create Ray-Tracing Pipelines...
 
 
     };
