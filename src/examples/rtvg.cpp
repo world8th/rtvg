@@ -7,7 +7,15 @@
 #define VMA_IMPLEMENTATION
 #define RADX_IMPLEMENTATION
 
+#undef small
+#define small char
+#undef small
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include "../base/appRenderer.hpp"
+#include <svgpp/svgpp.hpp>
+#include <mapbox/earcut.hpp>
+#undef small
 
 namespace rnd {
 
@@ -113,7 +121,54 @@ namespace rnd {
     };
 
 
+
     void Renderer::InitRayTracing() {
+
+
+        // 
+        using Point = std::array<float, 2>;
+        std::vector<std::vector<Point>> polygon;
+
+        // make polygons
+        polygon.push_back({ {100, 0}, {100, 100}, {0, 100}, {0, 0} });
+        polygon.push_back({ {75, 25}, {75, 75}, {25, 75}, {25, 25} });
+
+        // get indices 
+        std::vector<uint32_t> indices = mapbox::earcut<uint32_t>(polygon);
+
+        // 
+        std::vector<std::vector<glm::vec3>> cinstances;
+        float fdepth = 0.f;
+        for (auto &I : polygon) {
+            std::vector<glm::vec3> poly;
+            float dp = fdepth; fdepth += 0.01f;
+            for (auto& p : I) {
+                poly.push_back({ p[0],p[1],dp });
+            }
+            cinstances.push_back(poly);
+        }
+
+        
+        // get memory size and set max element count
+        vk::DeviceSize memorySize = 1024 * 1024 * 32;
+        {
+            vmaDeviceBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eStorageTexelBuffer | vk::BufferUsageFlagBits::eUniformTexelBuffer | vk::BufferUsageFlagBits::eRayTracingNV | vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eIndexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
+            vmaToHostBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, VMA_MEMORY_USAGE_GPU_TO_CPU);
+            vmaHostBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc, VMA_MEMORY_USAGE_CPU_TO_GPU);
+        };
+
+        // 
+        auto vertexHostVector = radx::Vector<glm::vec3>(vmaHostBuffer, 1024 * 1024 * sizeof(glm::vec3), 0);
+        auto indiceHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * 1024 * sizeof(uint32_t), vertexHostVector.range());
+
+        // 
+        auto vertexDeviceVector = radx::Vector<glm::vec3>(vmaDeviceBuffer, 1024 * 1024 * sizeof(glm::vec3), 0);
+        auto indiceDeviceVector = radx::Vector<uint32_t>(vmaDeviceBuffer, 1024 * 1024 * sizeof(uint32_t), vertexDeviceVector.range());
+
+
+
+        // TODO: RTX initialization
+
 
     };
 
@@ -202,10 +257,7 @@ namespace rnd {
             auto sampler = vk::Device(*device).createSampler(samplerInfo); // create sampler
 
             // desc texture texture
-            vk::DescriptorImageInfo imageDesc = {};
-            imageDesc.imageLayout = vk::ImageLayout(outputImage->layout);
-            imageDesc.imageView = vk::ImageView(outputImage->imageView);
-            imageDesc.sampler = sampler;
+            auto imageDesc = vk::DescriptorImageInfo(*outputImage).setSampler(sampler);
 
             // update descriptors
             vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{

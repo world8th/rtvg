@@ -101,6 +101,7 @@ namespace radx {
 
 		// 
 		operator const vk::ImageView& () const { return imageView; };
+        operator const vk::DescriptorImageInfo() const { return imageDesc; };
 	};
 
 

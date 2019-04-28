@@ -2,7 +2,14 @@
 
 //#define VMA_IMPLEMENTATION
 //#define RADX_IMPLEMENTATION
+
+#undef small
+#define small char
+#undef small
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
 #include "../base/appRenderer.hpp"
+#undef small
 
 // initial renderer
 const uint32_t canvasWidth = 640, canvasHeight = 360; // 

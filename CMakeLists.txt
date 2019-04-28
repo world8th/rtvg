@@ -79,8 +79,16 @@ endif()
 
 # find package Thrust 
 find_package (PkgConfig QUIET)
+find_package (Boost REQUIRED)
 pkg_search_module(GLFW QUIET glfw3)
 pkg_search_module(GLFW QUIET renderdoc)
+
+
+#if (CUDA_FOUND) 
+    set (INC_DIR ${INC_DIR} ${Boost_INCLUDE_DIR})
+    set (LIB_DIR ${LIB_DIR} ${Boost_LIBRARIES})
+    #set (LIBS ${LIBS} ${CUDART_LIBRARY} ${CUDA_LIBRARY})
+#endif()
 
 if (CUDA_FOUND) 
     set (INC_DIR ${INC_DIR} ${CUDA_INCLUDE_DIRS} ${THRUST_INCLUDE_DIR})
