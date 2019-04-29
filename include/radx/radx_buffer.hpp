@@ -54,16 +54,16 @@ namespace radx {
 	class VmaAllocatedImage : public std::enable_shared_from_this<VmaAllocatedImage> {
 	public:
 		void* mappedData = {};
-		vk::Image image;
-		vk::ImageView imageView;
-		vk::ImageLayout layout;
-		vk::ImageSubresourceRange  srange;
-		vk::ImageSubresourceLayers slayers;
-		VmaAllocation allocation;
-		VmaAllocationInfo allocationInfo;
+        vk::Image image = {};
+		vk::ImageView imageView = {};
+		vk::ImageLayout layout = vk::ImageLayout::eGeneral;
+		vk::ImageSubresourceRange  srange = {};
+		vk::ImageSubresourceLayers slayers = {};
+		VmaAllocation allocation = {};
+		VmaAllocationInfo allocationInfo = {};
 		VmaMemoryUsage usage = VMA_MEMORY_USAGE_GPU_ONLY;
-		std::shared_ptr<radx::Device> device;
-		vk::DescriptorImageInfo imageDesc;
+		std::shared_ptr<radx::Device> device = {};
+		vk::DescriptorImageInfo imageDesc = {};
 
 	public:
 		VmaAllocatedImage();
@@ -77,7 +77,7 @@ namespace radx {
 		);
 
 		~VmaAllocatedImage() {
-			vmaDestroyImage(*device, *this, allocation);
+			//vmaDestroyImage(*device, *this, allocation);
 		};
 
 		// Get mapped memory

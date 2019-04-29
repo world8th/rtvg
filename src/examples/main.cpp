@@ -29,7 +29,10 @@ int main(int argc, char** argv) {
     renderer = std::make_shared<rnd::Renderer>();
     renderer->Arguments(argc, argv);
     renderer->Init(canvasWidth, canvasHeight, enableSuperSampling); // init GLFW window there
+    renderer->InitRayTracing();
+    renderer->InitPipeline();
     renderer->InitCommands();
+
 
     // looping rendering
     while (!glfwWindowShouldClose(renderer->window)) {

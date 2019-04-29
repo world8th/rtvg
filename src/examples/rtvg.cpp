@@ -17,6 +17,8 @@
 #include <mapbox/earcut.hpp>
 #undef small
 
+#include <glm/gtc/matrix_transform.hpp>
+
 namespace rnd {
 
     const uint32_t blockWidth = 8, blockheight = 8;
@@ -47,7 +49,7 @@ namespace rnd {
         if (scaleflag) modelScale = args::get(scaleflag);
         if (directoryflag) directory = args::get(directoryflag);
         if (help) { std::cout << parser; glfwTerminate(); } // required help or no arguments
-        if (modelInput == "") { std::cerr << "No model found :(" << std::endl; glfwTerminate(); exit(1); };
+        //if (modelInput == "") { std::cerr << "No model found :(" << std::endl; glfwTerminate(); exit(1); };
 
         if (reflLV) reflectionLevel = args::get(reflLV);
         if (trnsLV) transparencyLevel = args::get(trnsLV);
@@ -66,11 +68,12 @@ namespace rnd {
 
         // create vulkan and ray tracing instance
         appBase = std::make_shared<vte::ComputeFramework>();
-        cameraController = std::make_shared<CameraController>();
-        cameraController->canvasSize = (glm::uvec2*) & this->windowWidth;
-        cameraController->eyePos = &this->eyePos;
-        cameraController->upVector = &this->upVector;
-        cameraController->viewVector = &this->viewVector;
+
+        //cameraController = std::make_shared<CameraController>();
+        //cameraController->canvasSize = (glm::uvec2*) & this->windowWidth;
+        //cameraController->eyePos = &this->eyePos;
+        //cameraController->upVector = &this->upVector;
+        //cameraController->viewVector = &this->viewVector;
 
         // create VK instance
         auto instance = appBase->createInstance();
@@ -101,7 +104,7 @@ namespace rnd {
         std::cout << devProperties.vendorID << std::endl;
 
         // create combined device object
-        shaderPack = shaderPrefix + "shaders/" + getShaderDir(devProperties.vendorID);
+        shaderPack = shaderPrefix + "intrusive/" + getShaderDir(devProperties.vendorID);
 
         // create radix sort application (RadX C++)
         physicalHelper = std::make_shared<radx::PhysicalDeviceHelper>(appBase->getPhysicalDevice(0));
@@ -158,28 +161,6 @@ namespace rnd {
 
     void Renderer::InitRayTracing() {
 
-
-        // Initial scene (planned to replace)
-
-        // 
-        using Point = std::array<float, 2>;
-
-        // make polygons
-        std::vector<std::vector<Point>> pgeometries;
-        pgeometries.push_back({ {100, 0}, {100, 100}, {0, 100}, {0, 0} });
-        pgeometries.push_back({ {75, 25}, {75, 75}, {25, 75}, {25, 25} });
-
-        // get indices 
-        std::vector<uint32_t>  indices = mapbox::earcut<uint32_t>(pgeometries);
-        std::vector<glm::vec3> vertice = {};
-
-        // merge into VEC3 array 
-        float fdepth = 0.f;
-        for (auto &I : pgeometries) {
-            const float dp = fdepth; fdepth += 0.01f;
-            for (auto& p : I) { vertice.push_back({ p[0],p[1],dp }); }
-        }
-
         // get memory size and set max element count
         vk::DeviceSize memorySize = 1024 * 1024 * 32;
         {
@@ -188,16 +169,12 @@ namespace rnd {
             vmaHostBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc, VMA_MEMORY_USAGE_CPU_TO_GPU);
         };
 
-
-
-
-
         // buffer helpers
         auto vertexHostVector = radx::Vector<glm::vec3>(vmaHostBuffer, 1024 * sizeof(glm::vec3), 0);
         auto indiceHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * sizeof(uint32_t), vertexHostVector.range());
         auto instanceHostVector = radx::Vector<VkGeometryInstance>(vmaHostBuffer, 1024 * sizeof(VkGeometryInstance), indiceHostVector.offset()+indiceHostVector.range());
         auto scratchHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * 1024, instanceHostVector.offset() + instanceHostVector.range());
-        auto handlesHostVector = radx::Vector<uint64_t>(vmaHostBuffer, 1024 * sizeof(uint64_t), scratchHostVector.offset() + scratchHostVector.range());
+        auto handlesHostVector = radx::Vector<uint8_t>(vmaHostBuffer, 1024 * SGHZ, scratchHostVector.offset() + scratchHostVector.range());
         rtHandleVector = handlesHostVector;
 
         // 
@@ -209,8 +186,33 @@ namespace rnd {
 
 
 
-
         { // Templates Creation
+
+            // Initial scene (planned to replace)
+            using Point = std::array<float, 2>;
+
+            // make polygons
+            std::vector<std::vector<Point>> pgeometries;
+            pgeometries.push_back({ {100, 0}, {100, 100}, {0, 100}, {0, 0} });
+            pgeometries.push_back({ {75, 25}, {75, 75}, {25, 75}, {25, 25} });
+
+            // get indices 
+            std::vector<uint32_t>  indices = mapbox::earcut<uint32_t>(pgeometries);
+            std::vector<glm::vec3> vertice = {};
+
+            // merge into VEC3 array 
+            float fdepth = 0.f;
+            const float dp = (fdepth += 0.001f);
+            for (auto& I : pgeometries) {
+                for (auto& p : I) { vertice.push_back({ p[0],p[1],dp }); }
+            }
+
+
+
+            // 
+            memcpy(vertexHostVector.data(), vertice.data(), vertice.size() * sizeof(glm::vec3));
+            memcpy(indiceHostVector.data(), indices.data(), indices.size() * sizeof(uint32_t));
+
 
             // triangles
             vk::GeometryNV rtg = {};
@@ -225,6 +227,7 @@ namespace rnd {
             rtg.geometry.triangles.vertexFormat = vk::Format::eR32G32B32Sfloat;
             rtg.geometry.triangles.vertexOffset = vertexHostVector.offset();
 
+
             // instances
             vk::AccelerationStructureInfoNV dAS = {};
             dAS.flags = vk::BuildAccelerationStructureFlagBitsNV::ePreferFastTrace;
@@ -235,26 +238,26 @@ namespace rnd {
             // create acceleration structure object
             vk::AccelerationStructureCreateInfoNV cAS = {};
             cAS.info = dAS;
-            auto acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
+            vk::AccelerationStructureNV acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
             
             // get memory requirements
-            vk::AccelerationStructureMemoryRequirementsInfoNV memv;
+            vk::AccelerationStructureMemoryRequirementsInfoNV memv = {};
             memv.accelerationStructure = acceleration;
             memv.type = vk::AccelerationStructureMemoryRequirementsTypeNV::eObject;
-            auto objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
+            vk::MemoryRequirements2 objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
 
             // allocated memory 
-            VmaAllocation allocation; VmaAllocationInfo allocationInfo;
-            VmaAllocationCreateInfo vmac;
+            VmaAllocation allocation = {}; VmaAllocationInfo allocationInfo = {};
+            VmaAllocationCreateInfo vmac = {};
             vmac.usage = VMA_MEMORY_USAGE_GPU_ONLY;
             vmaAllocateMemory(*device, (VkMemoryRequirements*)&objectMem.memoryRequirements, &vmac, &allocation, &allocationInfo);
 
             // bind memory
-            vk::BindAccelerationStructureMemoryInfoNV bs;
+            vk::BindAccelerationStructureMemoryInfoNV bs = {};
             bs.accelerationStructure = acceleration;
             bs.memory = allocationInfo.deviceMemory;
             bs.memoryOffset = allocationInfo.offset;
-            vk::Device(*device).bindAccelerationStructureMemoryNV(bs);
+            vk::Device(*device).bindAccelerationStructureMemoryNV({ bs });
 
             // build structure
             radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
@@ -269,39 +272,43 @@ namespace rnd {
         { // Instances Creation
 
             // create instances
-            VkGeometryInstance ginstance;
+            VkGeometryInstance ginstance = {};
             ginstance.instanceId = 0;
             ginstance.instanceOffset = 0;
             ginstance.mask = 0xFF;
             ginstance.flags = VkGeometryInstanceFlagBitsNV::VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_NV;
+            ginstance.transform = glm::mat3x4(1.f);
             vk::Device(*device).getAccelerationStructureHandleNV(accelerationTemplates[0], sizeof(uint64_t), &ginstance.accelerationStructureHandle);
             instanceHostVector.map()[0] = ginstance;
+
+            ginstance.transform = glm::mat3x4(glm::transpose(glm::translate(glm::mat4(1.f), glm::vec3(50, 50, 0.001f))));
+            instanceHostVector.map()[1] = ginstance;
 
             // instances
             vk::AccelerationStructureInfoNV dAS = {};
             dAS.flags = vk::BuildAccelerationStructureFlagBitsNV::ePreferFastBuild | vk::BuildAccelerationStructureFlagBitsNV::eAllowUpdate | vk::BuildAccelerationStructureFlagBitsNV::eAllowCompaction;
             dAS.type = vk::AccelerationStructureTypeNV::eTopLevel;
-            dAS.instanceCount = 1;
+            dAS.instanceCount = 2;
 
             // create acceleration structure object
             vk::AccelerationStructureCreateInfoNV cAS = {};
             cAS.info = dAS;
-            auto acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
+            vk::AccelerationStructureNV acceleration = vk::Device(*device).createAccelerationStructureNV(cAS);
 
             // get memory requirements
-            vk::AccelerationStructureMemoryRequirementsInfoNV memv;
+            vk::AccelerationStructureMemoryRequirementsInfoNV memv = {};
             memv.accelerationStructure = acceleration;
             memv.type = vk::AccelerationStructureMemoryRequirementsTypeNV::eObject;
-            auto objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
+            vk::MemoryRequirements2KHR objectMem = vk::Device(*device).getAccelerationStructureMemoryRequirementsNV(memv);
 
             // allocated memory 
-            VmaAllocation allocation; VmaAllocationInfo allocationInfo;
-            VmaAllocationCreateInfo vmac;
+            VmaAllocation allocation = {}; VmaAllocationInfo allocationInfo = {};
+            VmaAllocationCreateInfo vmac = {};
             vmac.usage = VMA_MEMORY_USAGE_GPU_ONLY;
             vmaAllocateMemory(*device, (VkMemoryRequirements*)& objectMem.memoryRequirements, &vmac, &allocation, &allocationInfo);
 
             // bind memory
-            vk::BindAccelerationStructureMemoryInfoNV bs;
+            vk::BindAccelerationStructureMemoryInfoNV bs = {};
             bs.accelerationStructure = acceleration;
             bs.memory = allocationInfo.deviceMemory;
             bs.memoryOffset = allocationInfo.offset;
@@ -348,7 +355,6 @@ namespace rnd {
             std::vector<vk::WriteDescriptorSet> writes = {
                 vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageBuffer).setDstBinding(0).setPBufferInfo(&vk::DescriptorBufferInfo(vertexHostVector)),
                 vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageBuffer).setDstBinding(1).setPBufferInfo(&vk::DescriptorBufferInfo(indiceHostVector)),
-                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageImage).setDstBinding(2).setPImageInfo(&vk::DescriptorImageInfo(*outputImage)),
                 vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eAccelerationStructureNV).setDstBinding(3).setPNext(&acx)
             };
             vk::Device(*device).updateDescriptorSets(writes, {});
@@ -367,8 +373,8 @@ namespace rnd {
         // XPEH TB
         std::vector<vk::PipelineShaderStageCreateInfo> stages = {
             makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rgen.spv", "main", vk::ShaderStageFlagBits::eRaygenNV),
-            makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rchit.spv", "main", vk::ShaderStageFlagBits::eClosestHitNV),
-            makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rmiss.spv", "main", vk::ShaderStageFlagBits::eMissNV),
+            makePipelineStageInfo(*device, shaderPack + "/rtrace/handle.rchit.spv", "main", vk::ShaderStageFlagBits::eClosestHitNV),
+            makePipelineStageInfo(*device, shaderPack + "/rtrace/bgfill.rmiss.spv", "main", vk::ShaderStageFlagBits::eMissNV),
         };
 
         // 
@@ -390,23 +396,19 @@ namespace rnd {
         rtPipelineLayout = rpv.layout;
 
         // get rt handles
-        vk::Device(*device).getRayTracingShaderGroupHandlesNV(rtPipeline, 0, groups.size(), rtHandleVector.size()*sizeof(uint64_t), rtHandleVector.data());
+        vk::Device(*device).getRayTracingShaderGroupHandlesNV(rtPipeline, 0, groups.size(), rtHandleVector.size()*SGHZ, rtHandleVector.data());
     };
 
 
     void Renderer::InitPipeline() {
-        // descriptor set bindings
-        std::vector<vk::DescriptorSetLayoutBinding> descriptorSetLayoutBindings = { vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, nullptr) };
-        std::vector<vk::DescriptorSetLayout> descriptorSetLayouts = { vk::Device(*device).createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo().setPBindings(descriptorSetLayoutBindings.data()).setBindingCount(1)) };
-
-        // pipeline layout and cache
-        auto pipelineLayout = vk::Device(*device).createPipelineLayout(vk::PipelineLayoutCreateInfo().setPSetLayouts(descriptorSetLayouts.data()).setSetLayoutCount(descriptorSetLayouts.size()));
-        auto descriptorSets = vk::Device(*device).allocateDescriptorSets(vk::DescriptorSetAllocateInfo().setDescriptorPool(*device).setDescriptorSetCount(descriptorSetLayouts.size()).setPSetLayouts(descriptorSetLayouts.data()));
-        drawDescriptorSets = { descriptorSets[0] };
-
         // create pipeline
         vk::Pipeline trianglePipeline = {};
         {
+            vk::PipelineLayoutCreateInfo lpc;
+            lpc.pSetLayouts = &inputDescriptorLayout;
+            lpc.setLayoutCount = 1;
+            rsPipelineLayout = vk::Device(*device).createPipelineLayout(lpc);
+
             // pipeline stages
             std::vector<vk::PipelineShaderStageCreateInfo> pipelineShaderStages = {
                 vk::PipelineShaderStageCreateInfo().setModule(radx::createShaderModule(*device, radx::readBinary(shaderPack + "/render/render.vert.spv"))).setPName("main").setStage(vk::ShaderStageFlagBits::eVertex),
@@ -458,7 +460,7 @@ namespace rnd {
                     .setLogicOp(vk::LogicOp::eClear)
                     .setPAttachments(colorBlendAttachments.data())
                     .setAttachmentCount(colorBlendAttachments.size()))
-                .setLayout(pipelineLayout)
+                .setLayout(rsPipelineLayout)
                 .setRenderPass(appBase->renderpass)
                 .setBasePipelineIndex(0)
                 .setPMultisampleState(&vk::PipelineMultisampleStateCreateInfo().setRasterizationSamples(vk::SampleCountFlagBits::e1))
@@ -478,12 +480,35 @@ namespace rnd {
             auto sampler = vk::Device(*device).createSampler(samplerInfo); // create sampler
 
             // desc texture texture
-            auto imageDesc = vk::DescriptorImageInfo(*outputImage).setSampler(sampler);
+            auto imageDesc = vk::DescriptorImageInfo(*outputImage);//.setSampler(sampler);
+
+            // submit as secondary
+            radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
+                VkImageMemoryBarrier img_barrier = {};
+                img_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                img_barrier.image = outputImage->image;
+                img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                img_barrier.newLayout = VkImageLayout(outputImage->layout);
+                img_barrier.srcAccessMask = 0;
+                img_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                img_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                img_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                img_barrier.subresourceRange = outputImage->srange;
+
+                vk::CommandBuffer(cmd).pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands, vk::PipelineStageFlagBits::eAllCommands, {}, {}, {}, {vk::ImageMemoryBarrier(img_barrier)});
+            });
+
+            auto writeTmpl = vk::WriteDescriptorSet(inputDescriptorSet, 0, 0, 1, vk::DescriptorType::eStorageBuffer);
+            std::vector<vk::WriteDescriptorSet> writes = {
+                vk::WriteDescriptorSet(writeTmpl).setDescriptorType(vk::DescriptorType::eStorageImage).setDstBinding(2).setPImageInfo(&imageDesc),
+            };
+            vk::Device(*device).updateDescriptorSets(writes, {});
+
 
             // update descriptors
-            vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
-                vk::WriteDescriptorSet().setDstSet(descriptorSets[0]).setDstBinding(0).setDstArrayElement(0).setDescriptorCount(1).setDescriptorType(vk::DescriptorType::eCombinedImageSampler).setPImageInfo(&imageDesc),
-            }, nullptr);
+            //vk::Device(*device).updateDescriptorSets(std::vector<vk::WriteDescriptorSet>{
+            //    vk::WriteDescriptorSet().setDstSet(descriptorSets[0]).setDstBinding(0).setDstArrayElement(0).setDescriptorCount(1).setDescriptorType(vk::DescriptorType::eStorageImage).setPImageInfo(&imageDesc),
+            //}, nullptr);
         };
 
         currentContext = std::make_shared<vte::GraphicsContext>();
@@ -497,8 +522,8 @@ namespace rnd {
             context->device = device;
             context->pipeline = trianglePipeline;
             context->descriptorPool = *device;
-            context->descriptorSets = drawDescriptorSets;
-            context->pipelineLayout = pipelineLayout;
+            context->descriptorSets = {inputDescriptorSet};
+            context->pipelineLayout = rsPipelineLayout;
 
             // create framebuffers by size
             context->renderpass = appBase->renderpass;
@@ -557,18 +582,23 @@ namespace rnd {
             // create ray-tracing command (i.e. render vector graphics as is)
             vk::CommandBuffer& rtCmdBuf = this->rtCmdBuf;
             if (!rtCmdBuf) {
-                rtCmdBuf = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, false, false);
+                rtCmdBuf = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, true, false);
                 rtCmdBuf.bindPipeline(vk::PipelineBindPoint::eRayTracingNV, rtPipeline);
-                rtCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingNV, rtPipelineLayout, 0, drawDescriptorSets, { 0 });
+                rtCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingNV, rtPipelineLayout, 0, currentContext->descriptorSets, nullptr);
                 rtCmdBuf.traceRaysNV(
-                    rtHandleVector, 0ull * sizeof(uint64_t),
-                    rtHandleVector, 2ull * sizeof(uint64_t), sizeof(uint64_t),
-                    rtHandleVector, 1ull * sizeof(uint64_t), sizeof(uint64_t),
+                    rtHandleVector, rtHandleVector.offset() + 0ull * SGHZ,
+                    rtHandleVector, rtHandleVector.offset() + 2ull * SGHZ, SGHZ,
+                    rtHandleVector, rtHandleVector.offset() + 1ull * SGHZ, SGHZ,
                     {}, 0ull, 0ull,
                     appBase->size().width, appBase->size().height, 1u);
                 cmdRaytracingBarrierNV(rtCmdBuf);
                 rtCmdBuf.end();
             };
+
+            // submit as secondary
+            radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
+                vk::CommandBuffer(cmd).executeCommands({ rtCmdBuf });
+            });
 
 
             // create render submission 
@@ -578,7 +608,7 @@ namespace rnd {
             std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
             // 
-            std::array<vk::CommandBuffer, 2> XPEH = { rtCmdBuf, commandBuffer };
+            std::array<vk::CommandBuffer, 1> XPEH = { commandBuffer };
             auto smbi = vk::SubmitInfo()
                 .setPCommandBuffers(XPEH.data()).setCommandBufferCount(XPEH.size())
                 .setPWaitDstStageMask(waitStages.data()).setPWaitSemaphores(waitSemaphores.data()).setWaitSemaphoreCount(waitSemaphores.size())

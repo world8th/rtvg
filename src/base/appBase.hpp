@@ -254,6 +254,8 @@ namespace NSM
 #endif
 
             // get physical device for application
+            physicalDevices = instance.enumeratePhysicalDevices();
+
             return instance;
         };
 
@@ -308,7 +310,7 @@ namespace NSM
             // compute/graphics queue family
             for (auto queuefamily : gpuQueueProps) {
                 graphicsFamilyIndex++;
-                if (queuefamily.queueFlags & (vk::QueueFlagBits::eCompute) && queuefamily.queueFlags & (vk::QueueFlagBits::eGraphics)) {
+                if (queuefamily.queueFlags & (vk::QueueFlagBits::eCompute) && queuefamily.queueFlags & (vk::QueueFlagBits::eGraphics) && physicalDevice.getSurfaceSupportKHR(graphicsFamilyIndex, surface())) {
                     queueCreateInfos.push_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags()).setQueueFamilyIndex(graphicsFamilyIndex).setQueueCount(1).setPQueuePriorities(&priority));
                     queueFamilyIndices.push_back(graphicsFamilyIndex);
                     break;
@@ -516,10 +518,10 @@ namespace NSM
             };
 
             // create renderpass
-            return device.createRenderPass(vk::RenderPassCreateInfo(
+            return (renderpass = device.createRenderPass(vk::RenderPassCreateInfo(
                 vk::RenderPassCreateFlags(), attachmentDescriptions.size(),
                 attachmentDescriptions.data(), subpasses.size(), subpasses.data(),
-                dependencies.size(), dependencies.data()));
+                dependencies.size(), dependencies.data())));
         }
 
         // update swapchain framebuffer

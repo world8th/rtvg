@@ -93,23 +93,23 @@ namespace rnd {
         friend Renderer;
 
         static void TimeCallback(double milliseconds = 1e-5) {
-            Shared::active.tDiff = milliseconds - Shared::active.tCurrent, Shared::active.tCurrent = milliseconds;
+            //Shared::active.tDiff = milliseconds - Shared::active.tCurrent, Shared::active.tCurrent = milliseconds;
         };
 
         static void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-            if (action == GLFW_PRESS) Shared::active.keys[key] = uint8_t(1u);
-            if (action == GLFW_RELEASE) Shared::active.keys[key] = uint8_t(0u);
-            if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) { glfwTerminate(); exit(0); };
+            //if (action == GLFW_PRESS) Shared::active.keys[key] = uint8_t(1u);
+            //if (action == GLFW_RELEASE) Shared::active.keys[key] = uint8_t(0u);
+            //if (key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE) { glfwTerminate(); exit(0); };
         };
 
         static void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-            if (action == GLFW_PRESS) Shared::active.mouse[button] = uint8_t(1u);
-            if (action == GLFW_RELEASE) Shared::active.mouse[button] = uint8_t(0u);
+            //if (action == GLFW_PRESS) Shared::active.mouse[button] = uint8_t(1u);
+            //if (action == GLFW_RELEASE) Shared::active.mouse[button] = uint8_t(0u);
         };
 
         static void MouseMoveCallback(GLFWwindow * window, double xpos = 1e-5, double ypos = 1e-5) {
-            Shared::active.dX = xpos - Shared::active.mX, Shared::active.dY = ypos - Shared::active.mY; // get diff with previous position
-            Shared::active.mX = xpos, Shared::active.mY = ypos; // set current mouse position
+            //Shared::active.dX = xpos - Shared::active.mX, Shared::active.dY = ypos - Shared::active.mY; // get diff with previous position
+            //Shared::active.mX = xpos, Shared::active.mY = ypos; // set current mouse position
         };
     };
 
@@ -213,6 +213,7 @@ namespace rnd {
     class Renderer : public std::enable_shared_from_this<Renderer> {
     public:
         GLFWwindow* window = nullptr; // bound GLFW window
+        const uint32_t SGHZ = 16;
 
         operator vk::Instance& () { return appBase->instance; }
         operator const vk::Instance& () const { return appBase->instance; }
@@ -236,11 +237,9 @@ namespace rnd {
         // output image allocation
         std::shared_ptr<radx::VmaAllocatedImage> outputImage;
 
-
         // SVG Renderer Descriptors
         vk::DescriptorSetLayout inputDescriptorLayout;
         vk::DescriptorSet inputDescriptorSet;
-        std::vector<vk::DescriptorSet> drawDescriptorSets = {};
 
         // Accelerators of SVG renderings
         std::vector<vk::AccelerationStructureNV> accelerationTemplates;
@@ -249,7 +248,8 @@ namespace rnd {
         // Pipeline Layout
         vk::Pipeline rtPipeline;
         vk::PipelineLayout rtPipelineLayout;
-        radx::Vector<uint64_t> rtHandleVector;
+        vk::PipelineLayout rsPipelineLayout;
+        radx::Vector<uint8_t> rtHandleVector;
         vk::CommandBuffer rtCmdBuf;
 
         bool enableAdvancedAcceleration = true;
@@ -257,7 +257,7 @@ namespace rnd {
         uint32_t canvasWidth = 1, canvasHeight = 1; // canvas size with SSAA accounting
         uint32_t windowWidth = 1, windowHeight = 1; // virtual window size (without DPI recalculation)
         uint32_t realWidth = 1, realHeight = 1; // real window size (with DPI accounting)
-        uint32_t gpuID = 1;
+        uint32_t gpuID = 0;//1;
 
         // current rendering state
         int32_t currSemaphore = -1; uint32_t currentBuffer = 0;

@@ -166,7 +166,8 @@ namespace radx {
 #endif
 
 		// anyways create static descriptor
-		imageDesc = { {}, imageView, layout };
+
+		imageDesc = { {}, imageView, vk::ImageLayout::eGeneral };
 	};
 
 
@@ -258,6 +259,7 @@ namespace radx {
             psizes.push_back(vk::DescriptorPoolSize().setType(vk::DescriptorType::eStorageTexelBuffer).setDescriptorCount(128));
             psizes.push_back(vk::DescriptorPoolSize().setType(vk::DescriptorType::eInlineUniformBlockEXT).setDescriptorCount(128));
             psizes.push_back(vk::DescriptorPoolSize().setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(128));
+            psizes.push_back(vk::DescriptorPoolSize().setType(vk::DescriptorType::eAccelerationStructureNV).setDescriptorCount(128));
 
             vk::DescriptorPoolInlineUniformBlockCreateInfoEXT inlineDescPool{};
             inlineDescPool.maxInlineUniformBlockBindings = 2;
