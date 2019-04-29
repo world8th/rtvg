@@ -63,10 +63,10 @@ namespace rnd {
         std::string shaderDir = "./universal/";
         switch (vendorID) {
         case 4318:
-            shaderDir = "./nvidia/";
+            shaderDir = "./turing/";
             break;
         case 4098:
-            shaderDir = "./amd/";
+            shaderDir = "./vega10/";
             break;
         case 8086: // x86 ID, WHAT?
             shaderDir = "./intel/";
@@ -236,12 +236,21 @@ namespace rnd {
         // output image allocation
         std::shared_ptr<radx::VmaAllocatedImage> outputImage;
 
+
+        // SVG Renderer Descriptors
         vk::DescriptorSetLayout inputDescriptorLayout;
         vk::DescriptorSet inputDescriptorSet;
         std::vector<vk::DescriptorSet> drawDescriptorSets = {};
 
+        // Accelerators of SVG renderings
         std::vector<vk::AccelerationStructureNV> accelerationTemplates;
         vk::AccelerationStructureNV accelerationScene;
+
+        // Pipeline Layout
+        vk::Pipeline rtPipeline;
+        vk::PipelineLayout rtPipelineLayout;
+        radx::Vector<uint64_t> rtHandleVector;
+        vk::CommandBuffer rtCmdBuf;
 
         bool enableAdvancedAcceleration = true;
         float guiScale = 1.0f;

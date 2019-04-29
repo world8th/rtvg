@@ -129,13 +129,37 @@ namespace rnd {
 
 
     void Renderer::InitCommands() {
+        
+
 
     };
 
 
 
+
+
+
+    static inline auto makePipelineStageInfo(vk::Device device, std::string fpath = "", const char* entry = "main", vk::ShaderStageFlagBits stage = vk::ShaderStageFlagBits::eRaygenNV) {
+        std::vector<uint32_t> code = radx::readBinary(fpath);
+
+        auto spi = vk::PipelineShaderStageCreateInfo{};
+        //spi.module = {};
+        spi.flags = {};
+        radx::createShaderModuleIntrusive(device, code, spi.module);
+        spi.pName = entry;
+        spi.stage = stage;
+        spi.pSpecializationInfo = {};
+        return spi;
+    };
+
+
+
+
+
     void Renderer::InitRayTracing() {
 
+
+        // Initial scene (planned to replace)
 
         // 
         using Point = std::array<float, 2>;
@@ -152,10 +176,10 @@ namespace rnd {
         // merge into VEC3 array 
         float fdepth = 0.f;
         for (auto &I : pgeometries) {
-            float dp = fdepth; fdepth += 0.01f;
+            const float dp = fdepth; fdepth += 0.01f;
             for (auto& p : I) { vertice.push_back({ p[0],p[1],dp }); }
         }
-        
+
         // get memory size and set max element count
         vk::DeviceSize memorySize = 1024 * 1024 * 32;
         {
@@ -164,11 +188,17 @@ namespace rnd {
             vmaHostBuffer = std::make_shared<radx::VmaAllocatedBuffer>(this->device, memorySize, vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferSrc, VMA_MEMORY_USAGE_CPU_TO_GPU);
         };
 
+
+
+
+
         // buffer helpers
         auto vertexHostVector = radx::Vector<glm::vec3>(vmaHostBuffer, 1024 * sizeof(glm::vec3), 0);
         auto indiceHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * sizeof(uint32_t), vertexHostVector.range());
-        auto instanceHostVector = radx::Vector<VkGeometryInstance>(vmaHostBuffer, 1024 * sizeof(uint32_t), indiceHostVector.offset()+indiceHostVector.range());
+        auto instanceHostVector = radx::Vector<VkGeometryInstance>(vmaHostBuffer, 1024 * sizeof(VkGeometryInstance), indiceHostVector.offset()+indiceHostVector.range());
         auto scratchHostVector = radx::Vector<uint32_t>(vmaHostBuffer, 1024 * 1024, instanceHostVector.offset() + instanceHostVector.range());
+        auto handlesHostVector = radx::Vector<uint64_t>(vmaHostBuffer, 1024 * sizeof(uint64_t), scratchHostVector.offset() + scratchHostVector.range());
+        rtHandleVector = handlesHostVector;
 
         // 
         //auto vertexDeviceVector = radx::Vector<glm::vec3>(vmaDeviceBuffer, 1024 * sizeof(glm::vec3), 0);
@@ -293,15 +323,13 @@ namespace rnd {
             const auto vkfl = vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT().setPBindingFlags(&pbindings);
             const auto vkpi = vk::DescriptorSetLayoutCreateInfo().setPNext(&vkfl);
 
-            {
-                const std::vector<vk::DescriptorSetLayoutBinding> _bindings = {
-                    vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
-                    vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
-                    vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eAll),
-                    vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eAccelerationStructureNV, 1, vk::ShaderStageFlagBits::eAll),
-                };
-                inputDescriptorLayout = vk::Device(*device).createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo(vkpi).setPBindings(_bindings.data()).setBindingCount(_bindings.size()));
+            const std::vector<vk::DescriptorSetLayoutBinding> _bindings = {
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
+                vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eAll),
+                vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eAll),
+                vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eAccelerationStructureNV, 1, vk::ShaderStageFlagBits::eAll),
             };
+            inputDescriptorLayout = vk::Device(*device).createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo(vkpi).setPBindings(_bindings.data()).setBindingCount(_bindings.size()));
         }
 
         {
@@ -329,9 +357,40 @@ namespace rnd {
 
 
 
-        // TODO: Create Ray-Tracing Pipelines...
 
+        std::vector<vk::RayTracingShaderGroupCreateInfoNV> groups = {
+            vk::RayTracingShaderGroupCreateInfoNV().setGeneralShader(0u).setClosestHitShader(~0u).setAnyHitShader(~0u).setIntersectionShader(~0u).setType(vk::RayTracingShaderGroupTypeNV::eGeneral),
+            vk::RayTracingShaderGroupCreateInfoNV().setGeneralShader(~0u).setClosestHitShader(1u).setAnyHitShader(~0u).setIntersectionShader(~0u).setType(vk::RayTracingShaderGroupTypeNV::eTrianglesHitGroup),
+            vk::RayTracingShaderGroupCreateInfoNV().setGeneralShader(2u).setClosestHitShader(~0u).setAnyHitShader(~0u).setIntersectionShader(~0u).setType(vk::RayTracingShaderGroupTypeNV::eGeneral),
+        };
 
+        // XPEH TB
+        std::vector<vk::PipelineShaderStageCreateInfo> stages = {
+            makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rgen.spv", "main", vk::ShaderStageFlagBits::eRaygenNV),
+            makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rchit.spv", "main", vk::ShaderStageFlagBits::eClosestHitNV),
+            makePipelineStageInfo(*device, shaderPack + "/rtrace/rtrace.rmiss.spv", "main", vk::ShaderStageFlagBits::eMissNV),
+        };
+
+        // 
+        vk::PipelineLayoutCreateInfo lpc;
+        lpc.pSetLayouts = &inputDescriptorLayout;
+        lpc.setLayoutCount = 1;
+
+        // 
+        vk::RayTracingPipelineCreateInfoNV rpv;
+        rpv.groupCount = groups.size();
+        rpv.stageCount = stages.size();
+        rpv.pGroups = groups.data();
+        rpv.pStages = stages.data();
+        rpv.maxRecursionDepth = 16;
+        rpv.layout = vk::Device(*device).createPipelineLayout(lpc);
+        rtPipeline = vk::Device(*device).createRayTracingPipelineNV(*device, rpv);
+
+        // 
+        rtPipelineLayout = rpv.layout;
+
+        // get rt handles
+        vk::Device(*device).getRayTracingShaderGroupHandlesNV(rtPipeline, 0, groups.size(), rtHandleVector.size()*sizeof(uint64_t), rtHandleVector.data());
     };
 
 
@@ -350,8 +409,8 @@ namespace rnd {
         {
             // pipeline stages
             std::vector<vk::PipelineShaderStageCreateInfo> pipelineShaderStages = {
-                vk::PipelineShaderStageCreateInfo().setModule(radx::createShaderModule(*device, radx::readBinary(shaderPack + "/output/render.vert.spv"))).setPName("main").setStage(vk::ShaderStageFlagBits::eVertex),
-                vk::PipelineShaderStageCreateInfo().setModule(radx::createShaderModule(*device, radx::readBinary(shaderPack + "/output/render.frag.spv"))).setPName("main").setStage(vk::ShaderStageFlagBits::eFragment)
+                vk::PipelineShaderStageCreateInfo().setModule(radx::createShaderModule(*device, radx::readBinary(shaderPack + "/render/render.vert.spv"))).setPName("main").setStage(vk::ShaderStageFlagBits::eVertex),
+                vk::PipelineShaderStageCreateInfo().setModule(radx::createShaderModule(*device, radx::readBinary(shaderPack + "/render/render.frag.spv"))).setPName("main").setStage(vk::ShaderStageFlagBits::eFragment)
             };
 
             // blend modes per framebuffer targets
@@ -448,6 +507,25 @@ namespace rnd {
         };
     };
 
+
+
+    static inline vk::Result cmdRaytracingBarrierNV(vk::CommandBuffer cmdBuffer) {
+        VkMemoryBarrier memoryBarrier = {};
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        memoryBarrier.pNext = nullptr;
+        memoryBarrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_NV | VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT | VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        memoryBarrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_NV | VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_INDEX_READ_BIT;
+        vkCmdPipelineBarrier(
+            cmdBuffer,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_NV | VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_NV | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            VK_DEPENDENCY_BY_REGION_BIT,
+            1, &memoryBarrier,
+            0, nullptr,
+            0, nullptr);
+        return vk::Result::eSuccess;
+    };
+
     void Renderer::Draw() {
         auto n_semaphore = currSemaphore;
         auto c_semaphore = int32_t((size_t(currSemaphore) + 1ull) % currentContext->framebuffers.size());
@@ -476,6 +554,23 @@ namespace rnd {
                 commandBuffer.end();
             };
 
+            // create ray-tracing command (i.e. render vector graphics as is)
+            vk::CommandBuffer& rtCmdBuf = this->rtCmdBuf;
+            if (!rtCmdBuf) {
+                rtCmdBuf = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, false, false);
+                rtCmdBuf.bindPipeline(vk::PipelineBindPoint::eRayTracingNV, rtPipeline);
+                rtCmdBuf.bindDescriptorSets(vk::PipelineBindPoint::eRayTracingNV, rtPipelineLayout, 0, drawDescriptorSets, { 0 });
+                rtCmdBuf.traceRaysNV(
+                    rtHandleVector, 0ull * sizeof(uint64_t),
+                    rtHandleVector, 2ull * sizeof(uint64_t), sizeof(uint64_t),
+                    rtHandleVector, 1ull * sizeof(uint64_t), sizeof(uint64_t),
+                    {}, 0ull, 0ull,
+                    appBase->size().width, appBase->size().height, 1u);
+                cmdRaytracingBarrierNV(rtCmdBuf);
+                rtCmdBuf.end();
+            };
+
+
             // create render submission 
             std::vector<vk::Semaphore>
                 waitSemaphores = { currentContext->framebuffers[n_semaphore].semaphore },
@@ -483,9 +578,10 @@ namespace rnd {
             std::vector<vk::PipelineStageFlags> waitStages = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
 
             // 
+            std::array<vk::CommandBuffer, 2> XPEH = { rtCmdBuf, commandBuffer };
             auto smbi = vk::SubmitInfo()
+                .setPCommandBuffers(XPEH.data()).setCommandBufferCount(XPEH.size())
                 .setPWaitDstStageMask(waitStages.data()).setPWaitSemaphores(waitSemaphores.data()).setWaitSemaphoreCount(waitSemaphores.size())
-                .setPCommandBuffers(&commandBuffer).setCommandBufferCount(1)
                 .setPSignalSemaphores(signalSemaphores.data()).setSignalSemaphoreCount(signalSemaphores.size());
 
             // submit command once
