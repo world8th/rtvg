@@ -69,7 +69,7 @@ void main() {
             color *= 1.f-shapeColor.w;
             
             // BLUENT DESIGN
-            vec2 randev = vec2(gold_noise(origin.xy, 1.f), gold_noise(origin.xy, 2.f));
+            vec2 randev = vec2(gold_noise(curPixel.xy, 1.f), gold_noise(curPixel.xy, 2.f));
             vec2 offset = vec2(cos(randev.y*PIh),sin(randev.y*PIh))*(BLUR_RADIUS*randev.x);
             origin.xy += offset;
 
