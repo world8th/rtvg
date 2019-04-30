@@ -15,3 +15,9 @@ Ray-traced vector graphics can gift some possibilities, which you hasn't been:
 ## In far future...
 
 I believe that will best solution for Linux-based systems... It can avoid patent problems with Aero, make simpler some Microsoft design and ideomatic ideas.
+
+## Some motivations...
+
+- https://www.youtube.com/watch?v=udae1-3drkg
+- https://www.microsoft.com/design/fluent/
+- https://en.wikipedia.org/wiki/Vector_graphics
