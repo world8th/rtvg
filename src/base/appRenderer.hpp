@@ -270,8 +270,9 @@ namespace rnd {
         std::string directory = "./";
 
         // timings
-        double modelScale = 1.0, tPastFramerateStreamF = 60.0, tPast = 1e-5; int32_t reflectionLevel = 0, transparencyLevel = 0;
-        std::chrono::high_resolution_clock::time_point tStart = {}; // starting time
+        double modelScale = 1.0; int32_t reflectionLevel = 0, transparencyLevel = 0;
+        double tPastFrameTime = 0.f;
+        //std::chrono::high_resolution_clock::time_point tStart = {}; // starting time
 
         // camera position 
         const glm::vec3 scale = glm::vec3(1.f); // correction for precisions

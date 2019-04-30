@@ -565,19 +565,6 @@ namespace rnd {
             auto renderArea = vk::Rect2D(vk::Offset2D(0, 0), appBase->size());
             auto viewport = vk::Viewport(0.0f, 0.0f, appBase->size().width, appBase->size().height, 0, 1.0f);
 
-            // create command buffer (with rewrite)
-            vk::CommandBuffer& commandBuffer = currentContext->framebuffers[n_semaphore].commandBuffer;
-            if (!commandBuffer) {
-                commandBuffer = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, false, false); // do reference of cmd buffer
-                commandBuffer.beginRenderPass(vk::RenderPassBeginInfo(currentContext->renderpass, currentContext->framebuffers[currentBuffer].frameBuffer, renderArea, clearValues.size(), clearValues.data()), vk::SubpassContents::eInline);
-                commandBuffer.setViewport(0, std::vector<vk::Viewport> { viewport });
-                commandBuffer.setScissor(0, std::vector<vk::Rect2D> { renderArea });
-                commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, currentContext->pipeline);
-                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, currentContext->pipelineLayout, 0, currentContext->descriptorSets, nullptr);
-                commandBuffer.draw(4, 1, 0, 0);
-                commandBuffer.endRenderPass();
-                commandBuffer.end();
-            };
 
             // create ray-tracing command (i.e. render vector graphics as is)
             vk::CommandBuffer& rtCmdBuf = this->rtCmdBuf;
@@ -595,10 +582,25 @@ namespace rnd {
                 rtCmdBuf.end();
             };
 
+            // create command buffer (with rewrite)
+            vk::CommandBuffer& commandBuffer = currentContext->framebuffers[n_semaphore].commandBuffer;
+            if (!commandBuffer) {
+                commandBuffer = radx::createCommandBuffer(*currentContext->device, currentContext->commandPool, false, false); // do reference of cmd buffer
+                commandBuffer.executeCommands({ rtCmdBuf }); // pin ray-tracing into command
+                commandBuffer.beginRenderPass(vk::RenderPassBeginInfo(currentContext->renderpass, currentContext->framebuffers[currentBuffer].frameBuffer, renderArea, clearValues.size(), clearValues.data()), vk::SubpassContents::eInline);
+                commandBuffer.setViewport(0, std::vector<vk::Viewport> { viewport });
+                commandBuffer.setScissor(0, std::vector<vk::Rect2D> { renderArea });
+                commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, currentContext->pipeline);
+                commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, currentContext->pipelineLayout, 0, currentContext->descriptorSets, nullptr);
+                commandBuffer.draw(4, 1, 0, 0);
+                commandBuffer.endRenderPass();
+                commandBuffer.end();
+            };
+
             // submit as secondary
-            radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
-                vk::CommandBuffer(cmd).executeCommands({ rtCmdBuf });
-            });
+            //radx::submitOnce(*device, appBase->queue, appBase->commandPool, [&](VkCommandBuffer cmd) {
+            //    vk::CommandBuffer(cmd).executeCommands({ rtCmdBuf });
+            //});
 
 
             // create render submission 
@@ -631,17 +633,13 @@ namespace rnd {
 
 
     void Renderer::HandleData() {
-        auto tDiff = Shared::active.tDiff; // get computed time difference
+        const auto tFrameTime = glfwGetTime();
+        const auto tDiff = tFrameTime - tPastFrameTime, tFPS = 1.0 / tDiff; // get computed time difference ( TODO: rounding tFPS )
+        std::stringstream tFrameTimeStream{ "" }; tFrameTimeStream << std::fixed << std::setprecision(2) << (tDiff*1000.0);
+        std::stringstream tFrameRateStream{ "" }; tFrameRateStream << std::fixed << std::setprecision(2) << tFPS;
+        tPastFrameTime = tFrameTime;
 
-        std::stringstream tDiffStream{ "" };
-        tDiffStream << std::fixed << std::setprecision(2) << (tDiff);
-
-        std::stringstream tFramerateStream{ "" };
-        auto tFramerateStreamF = 1e3 / tDiff;
-        tPastFramerateStreamF = tPastFramerateStreamF * 0.5 + tFramerateStreamF * 0.5;
-        tFramerateStream << std::fixed << std::setprecision(0) << tPastFramerateStreamF;
-
-        auto wTitle = "vRt : " + tDiffStream.str() + "ms / " + tFramerateStream.str() + "Hz";
+        auto wTitle = "rtvg : " + tFrameTimeStream.str() + "ms / " + tFrameRateStream.str() + "fps";
         glfwSetWindowTitle(window, wTitle.c_str());
     };
 
