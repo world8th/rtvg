@@ -33,7 +33,7 @@ void main() {
     const vec2 sizPixel = vec2(gl_LaunchSizeNV.xy);
 
     // TRUE SPACE
-    const vec2 canvasSize = vec2(256.f*(sizPixel.x/sizPixel.y), 256.f);
+    const vec2 canvasSize = vec2(360.f*(sizPixel.x/sizPixel.y), 360.f);
 
 
 
