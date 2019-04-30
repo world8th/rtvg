@@ -21,3 +21,5 @@ I believe that will best solution for Linux-based systems... It can avoid patent
 - https://www.youtube.com/watch?v=udae1-3drkg
 - https://www.microsoft.com/design/fluent/
 - https://en.wikipedia.org/wiki/Vector_graphics
+- https://www.youtube.com/channel/UCd3aWvyGFbNjsJV0S7G-tgw
+- If the mountain won't come to Muhammad, then Muhammad must go to the mountain
